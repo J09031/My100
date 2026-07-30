@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>My100 RCPA</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --ink:#0E3B3A;
@@ -216,6 +217,10 @@ const DEFAULT_MASTER = [{"sr":1,"rm":"Rajorshi Bhattacharya","am":"Abhijit Karma
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
+/* ---- Shared Google Drive storage config ---- */
+const GOOGLE_CLIENT_ID = '606445408738-7cttm2bnhlrmjs2a6lvfmsako9q8ak06.apps.googleusercontent.com';
+const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+
 const PRODUCT_GROUPS = [
   { key:'ran', name:'Rantac Syrup', items:[
     { id:'ran100', label:'Rantac Syrup 100ml', weight:125.64 },
@@ -289,6 +294,9 @@ const state = {
   currentMonth: monthNow(),
   drawerDoctor: null, // doctor record currently open in drawer
   drawerDraft: null,  // draft entry object being edited
+  accessToken: null,      // Google OAuth access token for the shared Drive account
+  tokenExpiresAt: null,   // epoch ms
+  driveFileIds: {},       // cache: storage key -> Drive file id
 };
 
 function monthNow(){
@@ -336,28 +344,134 @@ function monthSelectHtml(id, selected){
   ).join('')}</select>`;
 }
 
-/* ============ STORAGE HELPERS ============ */
-async function storageGet(key, shared){
-  try{
-    const r = await window.storage.get(key, shared);
-    return r ? r.value : null;
-  }catch(e){ return null; }
-}
-async function storageSet(key, value, shared){
-  try{
-    const r = await window.storage.set(key, value, shared);
-    return !!r;
-  }catch(e){ return false; }
+/* ============ GOOGLE DRIVE AUTH ============ */
+function ensureTokenClient(){
+  return new Promise((resolve, reject)=>{
+    let tries = 0;
+    const check = ()=>{
+      if(window.google && window.google.accounts && window.google.accounts.oauth2){
+        if(!window.__tokenClient){
+          window.__tokenClient = window.google.accounts.oauth2.initTokenClient({
+            client_id: GOOGLE_CLIENT_ID,
+            scope: GOOGLE_SCOPE,
+            callback: ()=>{},
+          });
+        }
+        resolve(window.__tokenClient);
+      } else if(tries++ < 30){
+        setTimeout(check, 200);
+      } else {
+        reject(new Error('Google sign-in could not load. Check your internet connection and reload.'));
+      }
+    };
+    check();
+  });
 }
 
-async function checkStorageHealth(){
+function requestAccessToken(forceConsent){
+  return new Promise(async (resolve, reject)=>{
+    try{
+      const tc = await ensureTokenClient();
+      tc.callback = (resp)=>{
+        if(resp.error){ reject(resp); return; }
+        state.accessToken = resp.access_token;
+        state.tokenExpiresAt = Date.now() + (resp.expires_in*1000);
+        try{ sessionStorage.setItem('my100_gtoken', JSON.stringify({ t: state.accessToken, exp: state.tokenExpiresAt })); }catch(e){}
+        resolve(resp);
+      };
+      tc.requestAccessToken({ prompt: forceConsent ? 'consent' : '' });
+    }catch(e){ reject(e); }
+  });
+}
+
+function tryRestoreSession(){
   try{
-    if(!window.storage) return false;
-    const testVal = 'ok-'+Date.now();
-    await window.storage.set('__healthcheck__', testVal, true);
-    const r = await window.storage.get('__healthcheck__', true);
-    return !!(r && r.value === testVal);
-  }catch(e){ return false; }
+    const raw = sessionStorage.getItem('my100_gtoken');
+    if(!raw) return;
+    const obj = JSON.parse(raw);
+    if(obj.exp > Date.now() + 60000){
+      state.accessToken = obj.t;
+      state.tokenExpiresAt = obj.exp;
+    }
+  }catch(e){}
+}
+
+/* ============ DRIVE-BACKED STORAGE (appDataFolder of the one shared account) ============ */
+async function driveApiFetch(url, opts){
+  opts = opts || {};
+  if(!state.accessToken) throw new Error('not-signed-in');
+  opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + state.accessToken });
+  let res = await fetch(url, opts);
+  if(res.status === 401){
+    await requestAccessToken(false); // try to refresh without forcing a full consent screen
+    opts.headers['Authorization'] = 'Bearer ' + state.accessToken;
+    res = await fetch(url, opts);
+  }
+  return res;
+}
+
+async function driveFindFileId(key){
+  if(state.driveFileIds[key]) return state.driveFileIds[key];
+  const name = key + '.json';
+  const q = encodeURIComponent(`name='${name.replace(/'/g,"\\'")}' and trashed=false`);
+  const url = `https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${q}&fields=files(id,name)`;
+  const res = await driveApiFetch(url);
+  if(!res.ok) return null;
+  const data = await res.json();
+  if(data.files && data.files.length){
+    state.driveFileIds[key] = data.files[0].id;
+    return data.files[0].id;
+  }
+  return null;
+}
+
+async function driveCreateFile(key, content){
+  const name = key + '.json';
+  const metadata = { name, parents: ['appDataFolder'] };
+  const boundary = '-------my100boundary';
+  const delimiter = "\r\n--" + boundary + "\r\n";
+  const closeDelim = "\r\n--" + boundary + "--";
+  const body = delimiter + 'Content-Type: application/json\r\n\r\n' + JSON.stringify(metadata)
+    + delimiter + 'Content-Type: application/json\r\n\r\n' + content + closeDelim;
+  const res = await driveApiFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'multipart/related; boundary=' + boundary },
+    body,
+  });
+  const data = await res.json();
+  state.driveFileIds[key] = data.id;
+  return data.id;
+}
+
+async function driveUpdateFile(fileId, content){
+  await driveApiFetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: content,
+  });
+}
+
+async function storageGet(key, shared){
+  try{
+    const fileId = await driveFindFileId(key);
+    if(!fileId) return null;
+    const res = await driveApiFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
+    if(!res.ok) return null;
+    const text = await res.text();
+    return text;
+  }catch(e){ console.error('storageGet failed', e); return null; }
+}
+
+async function storageSet(key, value, shared){
+  try{
+    let fileId = await driveFindFileId(key);
+    if(!fileId){
+      fileId = await driveCreateFile(key, value);
+    } else {
+      await driveUpdateFile(fileId, value);
+    }
+    return true;
+  }catch(e){ console.error('storageSet failed', e); return false; }
 }
 
 async function loadMaster(){
@@ -448,22 +562,57 @@ const root = document.getElementById('app');
 
 async function boot(){
   root.innerHTML = `<div class="empty" style="padding-top:80px;"><div class="big">⏳</div>Loading My100 RCPA…</div>`;
-  state.storageOK = await checkStorageHealth();
+  tryRestoreSession();
+  if(!state.accessToken){
+    renderGoogleGate();
+    return;
+  }
+  await afterAuthBoot();
+}
+
+async function afterAuthBoot(){
+  root.innerHTML = `<div class="empty" style="padding-top:80px;"><div class="big">⏳</div>Loading doctor list…</div>`;
   await loadMaster();
   renderLogin();
 }
 
-function storageBannerHtml(){
-  if(state.storageOK) return '';
-  return `<div class="storage-banner">
-    ⚠ <strong>Not connected to shared storage.</strong> This page was opened as a local file, so anything you save here stays only on this device/tab and will <u>not</u> be visible to others or saved for next time.
-    Open this app through the live Claude link that was shared with you (not a downloaded file) to fix this.
-  </div>`;
+function renderGoogleGate(errorMsg){
+  root.innerHTML = `
+    <div class="topbar">
+      <div class="brand"><span class="mark">My100</span><span class="sub">RCPA Field Tracker</span></div>
+    </div>
+    <div class="login-wrap">
+      <div class="login-card" style="text-align:center;">
+        <h1 class="login-title display">Connect to shared storage</h1>
+        <p class="login-sub">All RCPA data for everyone is kept in one shared Google Drive account. Sign in once with that shared account to continue.</p>
+        ${errorMsg ? `<div class="login-err" style="display:block;">${escHtml(errorMsg)}</div>` : ''}
+        <button class="btn btn-primary" id="googleSignInBtn" style="width:100%;">Sign in with Google</button>
+        <p class="muted" style="margin-top:14px;">Use the login for the shared My100 RCPA Google account — ask your admin if you don't have it.</p>
+      </div>
+    </div>
+  `;
+  document.getElementById('googleSignInBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('googleSignInBtn');
+    btn.disabled = true; btn.textContent = 'Opening Google sign-in…';
+    try{
+      await requestAccessToken(false);
+      await afterAuthBoot();
+    }catch(e){
+      renderGoogleGate('Sign-in failed or was cancelled. Please try again.');
+    }
+  });
+}
+
+function reconnectGoogle(){
+  requestAccessToken(true).then(()=>{
+    showToast('Reconnected to Google Drive ✔');
+  }).catch(()=>{
+    showToast('Reconnect failed — please try again.');
+  });
 }
 
 function topbarHtml(roleLabel){
   return `
-  ${storageBannerHtml()}
   <div class="topbar">
     <div class="brand">
       <span class="mark">My100</span>
@@ -472,6 +621,7 @@ function topbarHtml(roleLabel){
     <div class="who">
       <span class="role-chip">${roleLabel}</span>
       <span>${state.userName || ''}</span>
+      <button class="btn btn-ghost btn-sm" onclick="reconnectGoogle()" title="Click if saves stop working">🔄 Reconnect</button>
       <button class="btn btn-ghost btn-sm" onclick="logout()">Log out</button>
     </div>
   </div>`;
@@ -488,9 +638,9 @@ function renderLogin(){
   const ams = currentAmList();
   const rms = currentRmList();
   root.innerHTML = `
-    ${storageBannerHtml()}
     <div class="topbar">
       <div class="brand"><span class="mark">My100</span><span class="sub">RCPA Field Tracker</span></div>
+      <div class="who"><span class="role-chip" style="background:rgba(63,125,92,0.25);">🟢 Connected</span></div>
     </div>
     <div class="login-wrap">
       <div class="login-card">
@@ -1082,4 +1232,3 @@ boot();
 </script>
 </body>
 </html>
-
