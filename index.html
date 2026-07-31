@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>My100 RCPA</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -214,6 +217,7 @@ const DEFAULT_MASTER = [{"sr":1,"rm":"Rajorshi Bhattacharya","am":"Abhijit Karma
 </script>
 <script>
 /* ============ CONFIG ============ */
+const APP_VERSION = 'Build 2026-07-31 22:50 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -536,9 +540,9 @@ function topbarHtml(roleLabel){
 
 function connectionChipHtml(){
   if(state.connectionOK){
-    return `<span class="role-chip" style="background:rgba(63,125,92,0.25);" title="Connected to shared storage">🟢 Connected</span>`;
+    return `<span class="role-chip" style="background:rgba(63,125,92,0.25);" title="Connected to shared storage — ${APP_VERSION}">🟢 Connected</span>`;
   }
-  return `<span class="role-chip" style="background:rgba(180,86,44,0.35);" title="Click Retry">🔴 Disconnected — click Retry</span>`;
+  return `<span class="role-chip" style="background:rgba(180,86,44,0.35);" title="Click Retry — ${APP_VERSION}">🔴 Disconnected — click Retry</span>`;
 }
 
 function logout(){
@@ -574,6 +578,7 @@ function renderLogin(){
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%;">Sign in</button>
         </form>
+        <p class="muted" style="text-align:center; margin-top:18px; font-size:11px;">${APP_VERSION}</p>
       </div>
     </div>
   `;
