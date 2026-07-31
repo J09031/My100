@@ -6,6 +6,7 @@
 <title>My100 RCPA</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
   :root{
     --ink:#0E3B3A;
@@ -282,6 +283,24 @@ function normalizePractice(v){
   // if it already matches one of the new labels exactly (case-insensitive), keep it
   const found = PRACTICE_OPTIONS.find(o=>o.toUpperCase()===s);
   return found || '';
+}
+
+/* ---- Visit date (DD,DD,... or NVD) helpers ---- */
+function normalizeVisitInput(raw){
+  if(raw==null) return { valid:false, value:'' };
+  const s = String(raw).trim();
+  if(!s) return { valid:false, value:'' };
+  if(s.toUpperCase()==='NVD') return { valid:true, value:'NVD' };
+  const parts = s.split(',').map(p=>p.trim()).filter(Boolean);
+  if(!parts.length) return { valid:false, value:s };
+  const days = [];
+  for(const p of parts){
+    if(!/^\d{1,2}$/.test(p)) return { valid:false, value:s };
+    const n = parseInt(p,10);
+    if(n<1 || n>31) return { valid:false, value:s };
+    days.push(String(n).padStart(2,'0'));
+  }
+  return { valid:true, value: days.join(',') };
 }
 
 /* ============ STATE ============ */
@@ -706,9 +725,21 @@ function onLoginSubmit(e){
 
 function escAttr(s){ return String(s).replace(/"/g,'&quot;'); }
 function escHtml(s){ return String(s==null?'':s).replace(/[&<>]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+function visitChip(v){
+  if(!v) return '<span class="muted">—</span>';
+  if(v==='NVD') return '<span class="status-chip status-pending">NVD</span>';
+  return escHtml(v);
+}
+
+function uniqueVals(list, field){
+  return Array.from(new Set(list.map(d=>d[field]).filter(Boolean))).sort();
+}
+function filterSelectHtml(id, label, options, selected){
+  return `<select id="${id}"><option value="ALL">All ${label}</option>${options.map(o=>`<option value="${escAttr(o)}" ${o===selected?'selected':''}>${escHtml(o)}</option>`).join('')}</select>`;
+}
 
 /* ============ AM DASHBOARD ============ */
-let amState = { search:'', month: state.currentMonth };
+let amState = { search:'', month: state.currentMonth, meFilter:'ALL', specialtyFilter:'ALL', locationFilter:'ALL' };
 
 async function renderAmDashboard(){
   amState.month = state.currentMonth;
@@ -718,7 +749,13 @@ async function renderAmDashboard(){
 }
 
 function renderAmShell(myDoctors, entries){
-  const filtered = myDoctors.filter(d=> !amState.search || (d.doctor+' '+d.location+' '+d.specialty).toLowerCase().includes(amState.search.toLowerCase()));
+  const filtered = myDoctors.filter(d=>{
+    if(amState.meFilter!=='ALL' && d.me!==amState.meFilter) return false;
+    if(amState.specialtyFilter!=='ALL' && d.specialty!==amState.specialtyFilter) return false;
+    if(amState.locationFilter!=='ALL' && d.location!==amState.locationFilter) return false;
+    if(amState.search && !(d.doctor+' '+d.location+' '+d.specialty).toLowerCase().includes(amState.search.toLowerCase())) return false;
+    return true;
+  });
   const doneCount = myDoctors.filter(d=>entries[d.code]).length;
 
   root.innerHTML = `
@@ -741,12 +778,15 @@ function renderAmShell(myDoctors, entries){
         <div class="panel-pad">
           <div class="toolbar">
             <input type="text" class="search-box" id="amSearch" placeholder="Search doctor, location, specialty…" value="${escAttr(amState.search)}"/>
+            ${filterSelectHtml('meFilterSelect', 'MEs', uniqueVals(myDoctors,'me'), amState.meFilter)}
+            ${filterSelectHtml('specialtyFilterSelect', 'Specialties', uniqueVals(myDoctors,'specialty'), amState.specialtyFilter)}
+            ${filterSelectHtml('locationFilterSelect', 'Locations', uniqueVals(myDoctors,'location'), amState.locationFilter)}
             <button class="btn btn-outline" id="amExportBtn">⬇ Download my data (Excel)</button>
           </div>
           <div class="table-scroll">
             <table>
               <thead><tr>
-                <th>Sr</th><th>Doctor</th><th>Specialty</th><th>Location</th><th>Practice</th><th>Status</th><th></th>
+                <th>Sr</th><th>Doctor</th><th>ME</th><th>Specialty</th><th>Location</th><th>Practice</th><th>Status</th><th></th>
               </tr></thead>
               <tbody id="amRows"></tbody>
             </table>
@@ -763,6 +803,7 @@ function renderAmShell(myDoctors, entries){
     return `<tr>
       <td>${d.sr}</td>
       <td><strong>${escHtml(d.doctor)}</strong></td>
+      <td>${escHtml(d.me)}</td>
       <td>${escHtml(d.specialty)}</td>
       <td>${escHtml(d.location)}</td>
       <td>${escHtml(d.practice)}</td>
@@ -775,6 +816,15 @@ function renderAmShell(myDoctors, entries){
   });
   document.getElementById('amSearch').addEventListener('input', (e)=>{
     amState.search = e.target.value; renderAmShell(myDoctors, entries);
+  });
+  document.getElementById('meFilterSelect').addEventListener('change', (e)=>{
+    amState.meFilter = e.target.value; renderAmShell(myDoctors, entries);
+  });
+  document.getElementById('specialtyFilterSelect').addEventListener('change', (e)=>{
+    amState.specialtyFilter = e.target.value; renderAmShell(myDoctors, entries);
+  });
+  document.getElementById('locationFilterSelect').addEventListener('change', (e)=>{
+    amState.locationFilter = e.target.value; renderAmShell(myDoctors, entries);
   });
   document.getElementById('amExportBtn').addEventListener('click', async ()=>{
     const rows = await buildCompiledRows(myDoctors, amState.month);
@@ -853,6 +903,31 @@ function renderDrawerBody(){
     `).join('')}
 
     <div class="fgroup">
+      <h4>Visit Compliance</h4>
+      <p class="muted" style="margin-top:-4px;">Enter the day(s) of the month visited, e.g. <strong>05,12,19</strong>. If no visit happened this month, type <strong>NVD</strong>.</p>
+      <div class="fgrid">
+        <div class="fitem">
+          <label>ME Visit Dates <span style="color:var(--warn);">* required</span></label>
+          <input type="text" id="f_meVisit" value="${escAttr(draft.meVisit||'')}" placeholder="e.g. 05,12,19 or NVD"/>
+          <div class="muted" id="f_meVisit_err" style="color:var(--warn); display:none;"></div>
+        </div>
+        <div class="fitem">
+          <label>AM Visit Dates <span style="color:var(--warn);">* required</span></label>
+          <input type="text" id="f_amVisit" value="${escAttr(draft.amVisit||'')}" placeholder="e.g. 05,12,19 or NVD"/>
+          <div class="muted" id="f_amVisit_err" style="color:var(--warn); display:none;"></div>
+        </div>
+        <div class="fitem">
+          <label>RM Visit Dates <span class="muted">(optional)</span></label>
+          <input type="text" id="f_rmVisit" value="${escAttr(draft.rmVisit||'')}" placeholder="e.g. 12 or NVD"/>
+        </div>
+        <div class="fitem">
+          <label>DSM Visit Dates <span class="muted">(optional)</span></label>
+          <input type="text" id="f_dsmVisit" value="${escAttr(draft.dsmVisit||'')}" placeholder="e.g. 12 or NVD"/>
+        </div>
+      </div>
+    </div>
+
+    <div class="fgroup">
       <h4>Activity &amp; Notes</h4>
       <div class="fgrid">
         <div class="fitem">
@@ -870,6 +945,8 @@ function renderDrawerBody(){
         <div class="fitem" style="grid-column:1/-1;"><label>Input / remarks</label><textarea id="f_input" rows="3" placeholder="Any notes about this doctor / visit...">${escHtml(draft.input||'')}</textarea></div>
       </div>
     </div>
+
+    <div class="login-err" id="drawerFormErr" style="display:none;"></div>
 
     <div class="panel-pad" style="padding:0;">
       <div class="stat" style="display:inline-block; min-width:200px;">
@@ -909,12 +986,59 @@ function renderDrawerBody(){
   });
   actOtherInput.addEventListener('input', ()=>{ draft.activity = actOtherInput.value; });
   document.getElementById('f_input').addEventListener('input', e=> draft.input = e.target.value);
+  document.getElementById('f_meVisit').addEventListener('input', e=> draft.meVisit = e.target.value);
+  document.getElementById('f_amVisit').addEventListener('input', e=> draft.amVisit = e.target.value);
+  document.getElementById('f_rmVisit').addEventListener('input', e=> draft.rmVisit = e.target.value);
+  document.getElementById('f_dsmVisit').addEventListener('input', e=> draft.dsmVisit = e.target.value);
   document.getElementById('saveEntryBtn').addEventListener('click', saveCurrentEntry);
+}
+
+function saveValidationErrors(draft){
+  const errs = [];
+  if(!draft.practice) errs.push('Type of Practice is required.');
+  if(draft.patDay===''||draft.patDay==null) errs.push('No. of Patient/day is required.');
+  if(draft.pracDay===''||draft.pracDay==null) errs.push('Practice day/Mth is required.');
+  const me = normalizeVisitInput(draft.meVisit);
+  if(!me.valid) errs.push('ME Visit Dates is required — enter day numbers separated by commas (e.g. 05,12) or type NVD.');
+  const am = normalizeVisitInput(draft.amVisit);
+  if(!am.valid) errs.push('AM Visit Dates is required — enter day numbers separated by commas (e.g. 05,12) or type NVD.');
+  if(draft.rmVisit){
+    const rm = normalizeVisitInput(draft.rmVisit);
+    if(!rm.valid) errs.push('RM Visit Dates format is invalid — use comma-separated day numbers or NVD.');
+  }
+  if(draft.dsmVisit){
+    const dsm = normalizeVisitInput(draft.dsmVisit);
+    if(!dsm.valid) errs.push('DSM Visit Dates format is invalid — use comma-separated day numbers or NVD.');
+  }
+  return errs;
 }
 
 async function saveCurrentEntry(){
   const doc = state.drawerDoctor;
   const draft = state.drawerDraft;
+  const errBox = document.getElementById('drawerFormErr');
+
+  const errs = saveValidationErrors(draft);
+  if(errs.length){
+    errBox.innerHTML = '<strong>Please fix the following before saving:</strong><br>' + errs.map(e=>'• '+escHtml(e)).join('<br>');
+    errBox.style.display = 'block';
+    if(typeof errBox.scrollIntoView === 'function'){
+      errBox.scrollIntoView({ behavior:'smooth', block:'center' });
+    }
+    return;
+  }
+  errBox.style.display = 'none';
+
+  // normalize visit date fields to consistent DD,DD / NVD format before saving
+  const meN = normalizeVisitInput(draft.meVisit);
+  const amN = normalizeVisitInput(draft.amVisit);
+  const rmN = draft.rmVisit ? normalizeVisitInput(draft.rmVisit) : { valid:true, value:'' };
+  const dsmN = draft.dsmVisit ? normalizeVisitInput(draft.dsmVisit) : { valid:true, value:'' };
+  draft.meVisit = meN.value;
+  draft.amVisit = amN.value;
+  draft.rmVisit = rmN.value;
+  draft.dsmVisit = dsmN.value;
+
   const btn = document.getElementById('saveEntryBtn');
   btn.disabled = true; btn.textContent='Saving…';
   const entries = await loadEntriesForAmMonth(state.userName, amState.month);
@@ -956,17 +1080,17 @@ function compiledSummary(rows){
 }
 
 /* ============ RM DASHBOARD ============ */
-let compState = { month: state.currentMonth, search:'', amFilter:'ALL', rmFilter:'ALL' };
+let compState = { month: state.currentMonth, search:'', amFilter:'ALL', rmFilter:'ALL', meFilter:'ALL', specialtyFilter:'ALL', locationFilter:'ALL' };
 
 async function renderRmDashboard(){
   compState.month = state.currentMonth;
-  compState.amFilter='ALL';
+  compState.amFilter='ALL'; compState.meFilter='ALL'; compState.specialtyFilter='ALL'; compState.locationFilter='ALL';
   await renderCompiledDashboard('rm');
 }
 async function renderAdminDashboard(){
   compState.month = state.currentMonth;
-  compState.amFilter='ALL'; compState.rmFilter='ALL';
-  state.adminTab = 'report';
+  compState.amFilter='ALL'; compState.rmFilter='ALL'; compState.meFilter='ALL'; compState.specialtyFilter='ALL'; compState.locationFilter='ALL';
+  state.adminTab = 'dashboard';
   await renderCompiledDashboard('admin');
 }
 
@@ -980,6 +1104,10 @@ async function renderCompiledDashboard(role){
     scopeDoctors = state.master.filter(d=>d.rm===state.userName);
   }
   if(compState.amFilter!=='ALL') scopeDoctors = scopeDoctors.filter(d=>d.am===compState.amFilter);
+  const preFilterScope = scopeDoctors; // before ME/Specialty/Location filters, for building dropdown options
+  if(compState.meFilter!=='ALL') scopeDoctors = scopeDoctors.filter(d=>d.me===compState.meFilter);
+  if(compState.specialtyFilter!=='ALL') scopeDoctors = scopeDoctors.filter(d=>d.specialty===compState.specialtyFilter);
+  if(compState.locationFilter!=='ALL') scopeDoctors = scopeDoctors.filter(d=>d.location===compState.locationFilter);
 
   const rows = await buildCompiledRows(scopeDoctors, compState.month);
   const filteredRows = rows.filter(r=>{
@@ -998,6 +1126,7 @@ async function renderCompiledDashboard(role){
     <div class="main">
       ${isAdmin ? `
       <div class="tabs">
+        <div class="tab ${state.adminTab==='dashboard'?'active':''}" data-tab="dashboard">📊 Dashboard</div>
         <div class="tab ${state.adminTab==='report'?'active':''}" data-tab="report">Compiled Report</div>
         <div class="tab ${state.adminTab==='master'?'active':''}" data-tab="master">Doctor Master Data</div>
       </div>` : ''}
@@ -1015,10 +1144,14 @@ async function renderCompiledDashboard(role){
     renderMasterAdminBody();
     return;
   }
-  renderReportBody(role, scopeDoctors, filteredRows, summary, amOptions);
+  if(isAdmin && state.adminTab==='dashboard'){
+    await renderKpiDashboardBody();
+    return;
+  }
+  renderReportBody(role, scopeDoctors, filteredRows, summary, amOptions, preFilterScope);
 }
 
-function renderReportBody(role, scopeDoctors, rows, summary, amOptions){
+function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilterScope){
   const isAdmin = role==='admin';
   const body = document.getElementById('dashBody');
   body.innerHTML = `
@@ -1043,14 +1176,19 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions){
           <input type="text" class="search-box" id="rmSearch" placeholder="Search doctor, location, AM…" value="${escAttr(compState.search)}"/>
           ${isAdmin ? `<select id="rmFilterSelect"><option value="ALL">All RMs</option>${currentRmList().map(r=>`<option value="${escAttr(r)}" ${r===compState.rmFilter?'selected':''}>${r}</option>`).join('')}</select>` : ''}
           <select id="amFilterSelect"><option value="ALL">All AMs</option>${amOptions.map(a=>`<option value="${escAttr(a)}" ${a===compState.amFilter?'selected':''}>${a}</option>`).join('')}</select>
+          ${filterSelectHtml('meFilterSelect', 'MEs', uniqueVals(preFilterScope,'me'), compState.meFilter)}
+          ${filterSelectHtml('specialtyFilterSelect', 'Specialties', uniqueVals(preFilterScope,'specialty'), compState.specialtyFilter)}
+          ${filterSelectHtml('locationFilterSelect', 'Locations', uniqueVals(preFilterScope,'location'), compState.locationFilter)}
         </div>
         <div class="table-scroll">
           <table>
             <thead><tr>
-              <th>Sr</th><th>RM</th><th>AM</th><th>Doctor</th><th>Specialty</th><th>Location</th><th>Practice</th>
+              <th>Sr</th><th>RM</th><th>AM</th><th>ME</th><th>Doctor</th><th>Specialty</th><th>Location</th><th>Practice</th>
               <th>Pat/Day</th><th>Practice Days</th><th>Pat/Month</th>
               ${PRODUCT_GROUPS.map(g=>`<th>${g.name} Grp</th>`).join('')}
-              <th>Total Support</th><th>Activity</th><th>Input</th><th>Status</th>
+              <th>Total Support</th><th>Activity</th><th>Input</th>
+              <th>ME Visit</th><th>AM Visit</th><th>RM Visit</th><th>DSM Visit</th>
+              <th>Status</th>
             </tr></thead>
             <tbody id="rmRows"></tbody>
           </table>
@@ -1062,18 +1200,22 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions){
   document.getElementById('rmRows').innerHTML = rows.map(r=>{
     const d = r.doctor, e = r.entry || {};
     return `<tr>
-      <td>${d.sr}</td><td>${escHtml(d.rm)}</td><td>${escHtml(d.am)}</td>
+      <td>${d.sr}</td><td>${escHtml(d.rm)}</td><td>${escHtml(d.am)}</td><td>${escHtml(d.me)}</td>
       <td><strong>${escHtml(d.doctor)}</strong></td><td>${escHtml(d.specialty)}</td><td>${escHtml(d.location)}</td><td>${escHtml(e.practice || normalizePractice(d.practice) || d.practice)}</td>
       <td class="num-cell">${escHtml(e.patDay||'')}</td><td class="num-cell">${escHtml(e.pracDay||'')}</td><td class="num-cell">${escHtml(r.patMonth)}</td>
       ${PRODUCT_GROUPS.map(g=>`<td class="num-cell">${r.hasData ? r.groupTotals[g.key].toFixed(2) : ''}</td>`).join('')}
       <td class="num-cell"><strong>${r.hasData? r.totalSupport.toFixed(2): ''}</strong></td>
       <td>${escHtml(e.activity||'')}</td><td>${escHtml(e.input||'')}</td>
+      <td>${visitChip(e.meVisit)}</td><td>${visitChip(e.amVisit)}</td><td>${visitChip(e.rmVisit)}</td><td>${visitChip(e.dsmVisit)}</td>
       <td>${r.hasData?'<span class="status-chip status-done">Saved</span>':'<span class="status-chip status-pending">Pending</span>'}</td>
     </tr>`;
   }).join('');
 
   document.getElementById('rmSearch').addEventListener('input', e=>{ compState.search=e.target.value; renderCompiledDashboard(role); });
   document.getElementById('amFilterSelect').addEventListener('change', e=>{ compState.amFilter=e.target.value; renderCompiledDashboard(role); });
+  document.getElementById('meFilterSelect').addEventListener('change', e=>{ compState.meFilter=e.target.value; renderCompiledDashboard(role); });
+  document.getElementById('specialtyFilterSelect').addEventListener('change', e=>{ compState.specialtyFilter=e.target.value; renderCompiledDashboard(role); });
+  document.getElementById('locationFilterSelect').addEventListener('change', e=>{ compState.locationFilter=e.target.value; renderCompiledDashboard(role); });
   document.getElementById('monthSelect').addEventListener('change', e=>{ compState.month=e.target.value; state.currentMonth=e.target.value; renderCompiledDashboard(role); });
   if(isAdmin){
     document.getElementById('rmFilterSelect').addEventListener('change', e=>{ compState.rmFilter=e.target.value; compState.amFilter='ALL'; renderCompiledDashboard(role); });
@@ -1097,6 +1239,10 @@ function exportRowsToExcel(rows, monthOverride){
     rec['TOTAL SUPPORT'] = r.hasData? Number(r.totalSupport.toFixed(2)) : '';
     rec['Activity'] = e.activity||'';
     rec['Input'] = e.input||'';
+    rec['ME Visit Dates'] = e.meVisit||'';
+    rec['AM Visit Dates'] = e.amVisit||'';
+    rec['RM Visit Dates'] = e.rmVisit||'';
+    rec['DSM Visit Dates'] = e.dsmVisit||'';
     rec['Month'] = month;
     rec['Status'] = r.hasData ? 'Saved' : 'Pending';
     return rec;
@@ -1106,6 +1252,173 @@ function exportRowsToExcel(rows, monthOverride){
   XLSX.utils.book_append_sheet(wb, ws, 'My100 RCPA');
   XLSX.writeFile(wb, 'My100_RCPA_'+month+'.xlsx');
   showToast('Excel file downloading…');
+}
+
+/* ============ ADMIN: KPI DASHBOARD TAB ============ */
+let dashState = { month: state.currentMonth };
+let __chartInstances = [];
+
+function destroyCharts(){
+  __chartInstances.forEach(c=>{ try{ c.destroy(); }catch(e){} });
+  __chartInstances = [];
+}
+
+async function renderKpiDashboardBody(){
+  dashState.month = dashState.month || state.currentMonth;
+  const body = document.getElementById('dashBody');
+  body.innerHTML = `<div class="empty" style="padding-top:60px;"><div class="big">📊</div>Crunching the numbers…</div>`;
+
+  const rows = await buildCompiledRows(state.master, dashState.month);
+  const summary = compiledSummary(rows);
+
+  // RM-wise breakdown
+  const rmList = currentRmList();
+  const rmStats = rmList.map(rm=>{
+    const rmRows = rows.filter(r=>r.doctor.rm===rm);
+    const s = compiledSummary(rmRows);
+    return { rm, ...s };
+  });
+
+  // AM-wise breakdown (sorted by avg support desc)
+  const amList = currentAmList();
+  const amStats = amList.map(am=>{
+    const amRows = rows.filter(r=>r.doctor.am===am);
+    const s = compiledSummary(amRows);
+    return { am, rm: (state.master.find(d=>d.am===am)||{}).rm || '', ...s };
+  }).sort((a,b)=> b.avgSupport - a.avgSupport);
+
+  // Product group contribution (sum across all doctors with data)
+  const groupSums = PRODUCT_GROUPS.map(g=>({
+    name: g.name,
+    sum: rows.reduce((s,r)=> s + (r.hasData ? r.groupTotals[g.key] : 0), 0),
+  }));
+
+  // Practice type distribution
+  const practiceCounts = {};
+  rows.forEach(r=>{
+    const p = (r.entry && r.entry.practice) || normalizePractice(r.doctor.practice) || 'Unspecified';
+    practiceCounts[p] = (practiceCounts[p]||0) + 1;
+  });
+
+  // Visit compliance
+  const withData = rows.filter(r=>r.hasData);
+  const meNvd = withData.filter(r=>r.entry.meVisit==='NVD').length;
+  const meVisited = withData.filter(r=>r.entry.meVisit && r.entry.meVisit!=='NVD').length;
+  const meMissing = withData.filter(r=>!r.entry.meVisit).length;
+  const amNvd = withData.filter(r=>r.entry.amVisit==='NVD').length;
+  const amVisited = withData.filter(r=>r.entry.amVisit && r.entry.amVisit!=='NVD').length;
+  const amMissing = withData.filter(r=>!r.entry.amVisit).length;
+
+  body.innerHTML = `
+    <div class="row-between">
+      <h2 class="section-title">Dashboard — Key Metrics</h2>
+      <div class="row">
+        <label class="muted" style="font-size:12.5px;">Month</label>
+        ${monthSelectHtml('dashMonthSelect', dashState.month)}
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${summary.total}</div><div class="lbl">Total doctors (My100)</div></div>
+      <div class="stat"><div class="num">${summary.done}</div><div class="lbl">Updated for ${monthLabel(dashState.month)}</div></div>
+      <div class="stat"><div class="num">${summary.coverage}%</div><div class="lbl">Overall coverage</div></div>
+      <div class="stat"><div class="num">${summary.avgSupport.toFixed(2)}</div><div class="lbl">Avg. Total Support</div></div>
+      <div class="stat"><div class="num">${rows.reduce((s,r)=>s+(r.hasData?r.totalSupport:0),0).toFixed(2)}</div><div class="lbl">Sum Total Support</div></div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${meVisited}</div><div class="lbl">ME visits recorded</div></div>
+      <div class="stat"><div class="num" style="color:var(--warn);">${meNvd}</div><div class="lbl">ME — No Visit (NVD)</div></div>
+      <div class="stat"><div class="num">${amVisited}</div><div class="lbl">AM visits recorded</div></div>
+      <div class="stat"><div class="num" style="color:var(--warn);">${amNvd}</div><div class="lbl">AM — No Visit (NVD)</div></div>
+      <div class="stat"><div class="num">${meMissing+amMissing}</div><div class="lbl">Missing visit data (older entries)</div></div>
+    </div>
+
+    <div class="panel panel-pad" style="margin-bottom:16px;">
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Coverage by RM</h3>
+      <div style="height:260px;"><canvas id="chartRmCoverage"></canvas></div>
+    </div>
+
+    <div class="panel panel-pad" style="margin-bottom:16px;">
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Total Support by AM</h3>
+      <div style="height:320px;"><canvas id="chartAmSupport"></canvas></div>
+    </div>
+
+    <div class="row" style="align-items:stretch; gap:16px;">
+      <div class="panel panel-pad" style="flex:1; min-width:320px;">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Product Group Contribution</h3>
+        <div style="height:260px;"><canvas id="chartGroupSupport"></canvas></div>
+      </div>
+      <div class="panel panel-pad" style="flex:1; min-width:280px;">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Practice Type Mix</h3>
+        <div style="height:260px;"><canvas id="chartPracticeMix"></canvas></div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-pad">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">RM-wise Summary</h3>
+        <div class="table-scroll" style="max-height:280px;">
+          <table>
+            <thead><tr><th>RM</th><th>Doctors</th><th>Updated</th><th>Pending</th><th>Coverage</th><th>Avg Total Support</th></tr></thead>
+            <tbody>
+              ${rmStats.map(s=>`<tr><td><strong>${escHtml(s.rm)}</strong></td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.pending}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-pad">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">AM-wise Summary (ranked by Avg Total Support)</h3>
+        <div class="table-scroll" style="max-height:360px;">
+          <table>
+            <thead><tr><th>#</th><th>AM</th><th>RM</th><th>Doctors</th><th>Updated</th><th>Coverage</th><th>Avg Total Support</th></tr></thead>
+            <tbody>
+              ${amStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.am)}</strong></td><td>${escHtml(s.rm)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('dashMonthSelect').addEventListener('change', e=>{
+    dashState.month = e.target.value; state.currentMonth = e.target.value;
+    renderKpiDashboardBody();
+  });
+
+  destroyCharts();
+  try{
+    if(typeof Chart !== 'undefined'){
+      const palette = ['#0E3B3A','#D9713C','#3F7D5C','#B4562C','#12504E','#E8935F','#6B7370','#8a6d3b'];
+
+      __chartInstances.push(new Chart(document.getElementById('chartRmCoverage'), {
+        type: 'bar',
+        data: { labels: rmStats.map(s=>s.rm), datasets: [{ label:'Coverage %', data: rmStats.map(s=>s.coverage), backgroundColor:'#D9713C' }] },
+        options: { responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, max:100 } }, plugins:{ legend:{ display:false } } }
+      }));
+
+      __chartInstances.push(new Chart(document.getElementById('chartAmSupport'), {
+        type: 'bar',
+        data: { labels: amStats.map(s=>s.am), datasets: [{ label:'Avg Total Support', data: amStats.map(s=>Number(s.avgSupport.toFixed(2))), backgroundColor:'#0E3B3A' }] },
+        options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+      }));
+
+      __chartInstances.push(new Chart(document.getElementById('chartGroupSupport'), {
+        type: 'bar',
+        data: { labels: groupSums.map(g=>g.name), datasets: [{ label:'Total', data: groupSums.map(g=>Number(g.sum.toFixed(2))), backgroundColor:'#3F7D5C' }] },
+        options: { responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+      }));
+
+      __chartInstances.push(new Chart(document.getElementById('chartPracticeMix'), {
+        type: 'doughnut',
+        data: { labels: Object.keys(practiceCounts), datasets: [{ data: Object.values(practiceCounts), backgroundColor: palette }] },
+        options: { responsive:true, maintainAspectRatio:false }
+      }));
+    }
+  }catch(e){ console.error('Chart render failed', e); }
 }
 
 /* ============ ADMIN: MASTER DATA TAB ============ */
