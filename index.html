@@ -417,11 +417,15 @@ async function loadMaster(){
 }
 
 async function saveMaster(newMaster, byWhom){
-  await storageSet('my100_master', JSON.stringify(newMaster), true);
+  const ok1 = await storageSet('my100_master', JSON.stringify(newMaster), true);
   const meta = { updatedAt: new Date().toISOString(), updatedBy: byWhom };
-  await storageSet('my100_master_meta', JSON.stringify(meta), true);
-  state.master = newMaster;
-  state.masterMeta = meta;
+  const ok2 = await storageSet('my100_master_meta', JSON.stringify(meta), true);
+  if(ok1 && ok2){
+    state.master = newMaster;
+    state.masterMeta = meta;
+    return true;
+  }
+  return false;
 }
 
 async function loadEntriesForAmMonth(am, month){
@@ -435,8 +439,11 @@ async function loadEntriesForAmMonth(am, month){
 
 async function saveEntriesForAmMonth(am, month, entriesObj){
   const cacheKey = am+'__'+month;
-  state.entriesCache[cacheKey] = entriesObj;
-  return await storageSet('my100_entries__'+encodeURIComponent(am)+'__'+month, JSON.stringify(entriesObj), true);
+  const ok = await storageSet('my100_entries__'+encodeURIComponent(am)+'__'+month, JSON.stringify(entriesObj), true);
+  if(ok){
+    state.entriesCache[cacheKey] = entriesObj; // only trust the cache once the backend actually confirmed the write
+  }
+  return ok;
 }
 
 /* ============ COMPUTATION ============ */
@@ -929,7 +936,8 @@ async function saveCurrentEntry(){
 
   const btn = document.getElementById('saveEntryBtn');
   btn.disabled = true; btn.textContent='Saving…';
-  const entries = await loadEntriesForAmMonth(state.userName, amState.month);
+  const existing = await loadEntriesForAmMonth(state.userName, amState.month);
+  const entries = Object.assign({}, existing); // copy so a failed save can't silently mutate the cache
   entries[doc.code] = Object.assign({}, draft, { updatedAt: new Date().toISOString(), updatedBy: state.userName });
   const ok = await saveEntriesForAmMonth(state.userName, amState.month, entries);
   btn.disabled = false; btn.textContent='Save';
@@ -1418,10 +1426,16 @@ function parseMasterFile(file){
       });
       document.getElementById('confirmCancel').onclick = ()=> document.getElementById('confirmOverlay').classList.remove('open');
       document.getElementById('confirmOk').onclick = async ()=>{
-        await saveMaster(pendingMasterUpload, state.userName);
+        const okBtn = document.getElementById('confirmOk');
+        okBtn.disabled = true; okBtn.textContent = 'Saving…';
+        const ok = await saveMaster(pendingMasterUpload, state.userName);
+        okBtn.disabled = false; okBtn.textContent = 'Yes, replace';
         document.getElementById('confirmOverlay').classList.remove('open');
-        showToast('Master list updated ✔');
-        renderCompiledDashboard('admin');
+        if(ok){
+          showToast('Master list updated ✔');
+          renderCompiledDashboard('admin');
+        }
+        // if it failed, storageSet already showed an explanatory toast — the upload panel stays open so you can retry
       };
     }catch(err){
       document.getElementById('uploadPreview').innerHTML = `<div class="login-err" style="display:block;">Could not read this file. Please make sure it is a valid .xlsx file.</div>`;
