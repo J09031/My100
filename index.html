@@ -217,7 +217,7 @@ const DEFAULT_MASTER = [{"sr":1,"rm":"Rajorshi Bhattacharya","am":"Abhijit Karma
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-08-01 04:28 UTC';
+const APP_VERSION = 'Build 2026-08-01 09:46 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -402,6 +402,62 @@ async function storageSet(key, value, shared){
     if(typeof showToast === 'function'){
       showToast('⚠ Save failed — could not reach the shared storage backend. Check your internet connection and try again.');
     }
+    return false;
+  }
+}
+
+/* ============ MONTH-WISE SHEET MIRROR (readable tab per month, e.g. "July-26") ============ */
+function monthToSheetTabName(m){
+  const [y, mo] = m.split('-');
+  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return names[parseInt(mo,10)-1] + '-' + y.slice(-2);
+}
+
+function buildSheetRowArray(doc, entry, hasData, month){
+  const groupTotals = {};
+  PRODUCT_GROUPS.forEach(g=>{ groupTotals[g.key] = hasData ? computeGroupTotal(entry, g) : 0; });
+  const totalSupport = hasData ? computeTotalSupport(entry) : 0;
+  const patMonth = hasData ? computePatMonth(entry) : '';
+  const e = entry || {};
+  const sheetMonth = monthToSheetTabName(month);
+
+  const row = [
+    doc.sr, doc.rm, doc.am, doc.me, doc.code, doc.doctor, doc.specialty, doc.location,
+    (e.practice || normalizePractice(doc.practice) || doc.practice),
+    e.patDay!=null ? e.patDay : '', e.pracDay!=null ? e.pracDay : '', patMonth,
+  ];
+  PRODUCT_GROUPS.forEach(g=>{
+    g.items.forEach(it=> row.push(e[it.id]!=null ? e[it.id] : ''));
+    row.push(hasData ? Number(groupTotals[g.key].toFixed(2)) : '');
+  });
+  row.push(hasData ? Number(totalSupport.toFixed(2)) : '');
+  row.push(e.activity || '');
+  row.push(e.input!=null ? e.input : '');
+  row.push(e.meVisit || '');
+  row.push(e.amVisit || '');
+  row.push(e.rmVisit || '');
+  row.push(e.dsmVisit || '');
+  row.push(sheetMonth);
+  row.push(hasData ? 'Saved' : 'Pending');
+  return row;
+}
+
+async function mirrorRowToSheet(doc, entry, month){
+  try{
+    const sheetName = monthToSheetTabName(month);
+    const rowValues = buildSheetRowArray(doc, entry, true, month);
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'upsertRow', sheetName, row: rowValues, token: APPS_SCRIPT_SECRET }),
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    return true;
+  }catch(e){
+    // Non-fatal: the key/value store already holds the real saved data — this is just a readable mirror.
+    console.error('mirrorRowToSheet failed (data is still safely saved)', e);
     return false;
   }
 }
@@ -951,6 +1007,7 @@ async function saveCurrentEntry(){
     closeDrawer();
     const myDoctors = state.master.filter(d=>d.am===state.userName);
     renderAmShell(myDoctors, entries);
+    mirrorRowToSheet(doc, entries[doc.code], amState.month); // fire-and-forget: readable Sheet mirror, non-blocking
   }
   // if save failed, storageSet already showed a toast explaining why — leave the drawer open so nothing is lost
 }
@@ -1064,6 +1121,7 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
       <div class="row">
         <label class="muted" style="font-size:12.5px;">Month</label>
         ${monthSelectHtml('monthSelect', compState.month)}
+        <button class="btn btn-outline" id="syncSheetBtn">📄 Sync to Google Sheet</button>
         <button class="btn btn-primary" id="exportBtn">⬇ Download Excel</button>
       </div>
     </div>
@@ -1125,6 +1183,7 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
     document.getElementById('rmFilterSelect').addEventListener('change', e=>{ compState.rmFilter=e.target.value; compState.amFilter='ALL'; renderCompiledDashboard(role); });
   }
   document.getElementById('exportBtn').addEventListener('click', ()=> exportRowsToExcel(rows));
+  document.getElementById('syncSheetBtn').addEventListener('click', ()=> syncRowsToSheet(rows, compState.month));
 }
 
 function exportRowsToExcel(rows, monthOverride){
@@ -1156,6 +1215,31 @@ function exportRowsToExcel(rows, monthOverride){
   XLSX.utils.book_append_sheet(wb, ws, 'My100 RCPA');
   XLSX.writeFile(wb, 'My100_RCPA_'+month+'.xlsx');
   showToast('Excel file downloading…');
+}
+
+async function syncRowsToSheet(rows, month){
+  const rowsWithData = rows.filter(r=>r.hasData);
+  if(rowsWithData.length===0){
+    showToast('Nothing to sync — no doctors have data for this month yet.');
+    return;
+  }
+  const btn = document.getElementById('syncSheetBtn');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  let ok = 0, failed = 0;
+  for(let i=0; i<rowsWithData.length; i++){
+    btn.textContent = `Syncing… ${i+1}/${rowsWithData.length}`;
+    const r = rowsWithData[i];
+    const success = await mirrorRowToSheet(r.doctor, r.entry, month);
+    if(success) ok++; else failed++;
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+  if(failed===0){
+    showToast(`Synced ${ok} doctors to the "${monthToSheetTabName(month)}" tab ✔`);
+  }else{
+    showToast(`Synced ${ok} doctors — ${failed} failed. Check your connection and try again.`);
+  }
 }
 
 /* ============ ADMIN: KPI DASHBOARD TAB ============ */
