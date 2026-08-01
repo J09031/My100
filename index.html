@@ -153,6 +153,11 @@
   .status-pending{ background:var(--warn-bg); color:var(--warn); }
   .num-cell{ text-align:right; font-variant-numeric:tabular-nums; }
   th.num-header{ text-align:right; }
+  .sticky-col-1{ position:sticky; left:0; z-index:6; min-width:44px; max-width:56px; }
+  .sticky-col-2{ position:sticky; left:56px; z-index:6; min-width:150px; box-shadow: 2px 0 4px -2px rgba(0,0,0,0.15); }
+  thead th.sticky-col-1, thead th.sticky-col-2{ background:#EFE3F7; z-index:7; }
+  tbody td.sticky-col-1, tbody td.sticky-col-2{ background:var(--surface); }
+  tbody tr:hover td.sticky-col-1, tbody tr:hover td.sticky-col-2{ background:#FAF5FC; }
 
   /* ---------- drawer / modal ---------- */
   .overlay{
@@ -231,7 +236,7 @@ const LOGO_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFoCAI
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-08-01 14:47 UTC';
+const APP_VERSION = 'Build 2026-08-01 19:50 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -333,6 +338,7 @@ const state = {
   drawerDoctor: null, // doctor record currently open in drawer
   drawerDraft: null,  // draft entry object being edited
   connectionOK: true, // false once a backend call fails
+  lastSyncedAt: null,  // Date of the last successful backend call
 };
 
 function monthNow(){
@@ -389,6 +395,7 @@ async function storageGet(key, shared){
     if(!res.ok) return null;
     const data = await res.json();
     if(data.error){ console.error('storageGet error:', data.error); return null; }
+    state.lastSyncedAt = new Date();
     return (data.value === undefined || data.value === '') ? null : data.value;
   }catch(e){
     state.connectionOK = false;
@@ -410,6 +417,7 @@ async function storageSet(key, value, shared){
     if(!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     if(data.error) throw new Error(data.error);
+    state.lastSyncedAt = new Date();
     return true;
   }catch(e){
     console.error('storageSet failed', e);
@@ -570,6 +578,13 @@ function showToast(msg){
 const root = document.getElementById('app');
 
 async function boot(){
+  try{
+    const favicon = document.createElement('link');
+    favicon.rel = 'icon';
+    favicon.type = 'image/png';
+    favicon.href = LOGO_DATA_URI;
+    document.head.appendChild(favicon);
+  }catch(e){}
   root.innerHTML = `<div class="empty" style="padding-top:80px;"><div class="big">⏳</div>Loading My100 RCPA…</div>`;
   await loadMaster();
   renderLogin();
@@ -610,9 +625,18 @@ function topbarHtml(roleLabel){
   </div>`;
 }
 
+function lastSyncedLabel(){
+  if(!state.lastSyncedAt) return '';
+  const t = state.lastSyncedAt;
+  const hh = String(t.getHours()).padStart(2,'0');
+  const mm = String(t.getMinutes()).padStart(2,'0');
+  const ss = String(t.getSeconds()).padStart(2,'0');
+  return ` · synced ${hh}:${mm}:${ss}`;
+}
+
 function connectionChipHtml(){
   if(state.connectionOK){
-    return `<span class="role-chip" style="background:rgba(63,125,92,0.25);" title="Connected to shared storage — ${APP_VERSION}">🟢 Connected</span>`;
+    return `<span class="role-chip" style="background:rgba(63,125,92,0.25);" title="Connected to shared storage — ${APP_VERSION}">🟢 Connected${lastSyncedLabel()}</span>`;
   }
   return `<span class="role-chip" style="background:rgba(180,86,44,0.35);" title="Click Retry — ${APP_VERSION}">🔴 Disconnected — click Retry</span>`;
 }
@@ -629,13 +653,16 @@ function renderLogin(){
   const rms = currentRmList();
   root.innerHTML = `
     <div class="topbar">
-      <div class="brand"><span class="mark">My100</span><span class="sub">RCPA Field Tracker</span></div>
+      <div class="brand"><span class="crest-badge"><img src="${LOGO_DATA_URI}" alt="Binoy Singha crest"/></span><span class="mark">My100</span><span class="sub">RCPA Field Tracker</span></div>
       <div class="who">${connectionChipHtml()}</div>
     </div>
     <div class="login-wrap">
       <div class="login-card">
-        <h1 class="login-title display">Welcome back</h1>
-        <p class="login-sub">Sign in to enter your doctor data, or view the compiled RCPA report.</p>
+        <div style="display:flex; justify-content:center; margin-bottom:18px;">
+          <span class="crest-hero" style="width:76px; height:76px; border-radius:18px;"><img src="${LOGO_DATA_URI}" alt="Binoy Singha crest"/></span>
+        </div>
+        <h1 class="login-title display" style="text-align:center;">Welcome back</h1>
+        <p class="login-sub" style="text-align:center;">Sign in to enter your doctor data, or view the compiled RCPA report.</p>
         <div class="role-grid" id="roleGrid">
           <div class="role-card ${loginRole==='am'?'active':''}" data-role="am"><span class="r-icon">🩺</span><span class="r-label">AM</span></div>
           <div class="role-card ${loginRole==='rm'?'active':''}" data-role="rm"><span class="r-icon">📊</span><span class="r-label">RM</span></div>
@@ -1161,7 +1188,7 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
         <div class="table-scroll">
           <table>
             <thead><tr>
-              <th>Sr</th><th>RM</th><th>AM</th><th>ME</th><th>Doctor</th><th>Specialty</th><th>Location</th><th>Practice</th>
+              <th class="sticky-col-1">Sr</th><th class="sticky-col-2">Doctor</th><th>RM</th><th>AM</th><th>ME</th><th>Specialty</th><th>Location</th><th>Practice</th>
               <th class="num-header">Pat/Day</th><th class="num-header">Practice Days</th><th class="num-header">Pat/Month</th>
               ${PRODUCT_GROUPS.map(g=>`<th class="num-header">${g.name} Grp</th>`).join('')}
               <th class="num-header">Total Support</th><th>Activity</th><th class="num-header">Input</th>
@@ -1178,8 +1205,8 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
   document.getElementById('rmRows').innerHTML = rows.map(r=>{
     const d = r.doctor, e = r.entry || {};
     return `<tr>
-      <td>${d.sr}</td><td>${escHtml(d.rm)}</td><td>${escHtml(d.am)}</td><td>${escHtml(d.me)}</td>
-      <td><strong>${escHtml(d.doctor)}</strong></td><td>${escHtml(d.specialty)}</td><td>${escHtml(d.location)}</td><td>${escHtml(e.practice || normalizePractice(d.practice) || d.practice)}</td>
+      <td class="sticky-col-1">${d.sr}</td><td class="sticky-col-2"><strong>${escHtml(d.doctor)}</strong></td><td>${escHtml(d.rm)}</td><td>${escHtml(d.am)}</td><td>${escHtml(d.me)}</td>
+      <td>${escHtml(d.specialty)}</td><td>${escHtml(d.location)}</td><td>${escHtml(e.practice || normalizePractice(d.practice) || d.practice)}</td>
       <td class="num-cell">${escHtml(e.patDay||'')}</td><td class="num-cell">${escHtml(e.pracDay||'')}</td><td class="num-cell">${escHtml(r.patMonth)}</td>
       ${PRODUCT_GROUPS.map(g=>`<td class="num-cell">${r.hasData ? r.groupTotals[g.key].toFixed(2) : ''}</td>`).join('')}
       <td class="num-cell"><strong>${r.hasData? r.totalSupport.toFixed(2): ''}</strong></td>
@@ -1297,8 +1324,9 @@ async function renderKpiDashboardBody(){
       .map(r=> r.entry.input!=null && r.entry.input!=='' ? parseFloat(r.entry.input) : null)
       .filter(v=> v!=null && !isNaN(v));
     const avgInput = inputVals.length ? inputVals.reduce((a,b)=>a+b,0)/inputVals.length : 0;
+    const inputReportingCount = inputVals.length;
     const sumSupport = amWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
-    return { am, rm: (state.master.find(d=>d.am===am)||{}).rm || '', ...s, nvdCount, visitCoveragePct, avgInput, sumSupport };
+    return { am, rm: (state.master.find(d=>d.am===am)||{}).rm || '', ...s, nvdCount, visitCoveragePct, avgInput, inputReportingCount, sumSupport };
   }).sort((a,b)=> b.avgSupport - a.avgSupport);
 
   // Product group contribution (weighted score, sum across all doctors with data)
@@ -1506,12 +1534,12 @@ async function renderKpiDashboardBody(){
     <div class="panel" style="margin-top:16px;">
       <div class="panel-pad">
         <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">AM-wise Summary (ranked by Avg Total Support)</h3>
-        <p class="muted" style="margin-top:-8px;">Avg Input = average of the numeric value AMs enter in the Input field, across doctors updated this month.</p>
+        <p class="muted" style="margin-top:-8px;">Avg Input = average of the numeric value AMs enter in the Input field, across doctors updated this month. The number in brackets is how many of those doctors actually had a numeric value entered (older entries saved before Input became numeric are excluded, not counted as zero).</p>
         <div class="table-scroll" style="max-height:360px;">
           <table>
             <thead><tr><th class="num-header">#</th><th>AM</th><th>RM</th><th class="num-header">Doctors</th><th class="num-header">Updated</th><th class="num-header">Coverage</th><th class="num-header">NVD by AM</th><th class="num-header">% Visit Coverage (AM)</th><th class="num-header">Total Support</th><th class="num-header">Avg Support</th><th class="num-header">Avg Input</th></tr></thead>
             <tbody>
-              ${amStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.am)}</strong></td><td>${escHtml(s.rm)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.nvdCount}</td><td class="num-cell">${s.visitCoveragePct}%</td><td class="num-cell">${s.sumSupport.toFixed(2)}</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td><td class="num-cell">${s.avgInput.toFixed(1)}</td></tr>`).join('')}
+              ${amStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.am)}</strong></td><td>${escHtml(s.rm)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.nvdCount}</td><td class="num-cell">${s.visitCoveragePct}%</td><td class="num-cell">${s.sumSupport.toFixed(2)}</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td><td class="num-cell">${s.avgInput.toFixed(1)} <span class="muted" style="font-size:11px;">(${s.inputReportingCount})</span></td></tr>`).join('')}
             </tbody>
           </table>
         </div>
