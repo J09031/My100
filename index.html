@@ -217,7 +217,7 @@ const DEFAULT_MASTER = [{"sr":1,"rm":"Rajorshi Bhattacharya","am":"Abhijit Karma
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-07-31 22:50 UTC';
+const APP_VERSION = 'Build 2026-08-01 04:08 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -1174,6 +1174,7 @@ async function renderKpiDashboardBody(){
 
   const rows = await buildCompiledRows(state.master, dashState.month);
   const summary = compiledSummary(rows);
+  const withData = rows.filter(r=>r.hasData);
 
   // RM-wise breakdown
   const rmList = currentRmList();
@@ -1183,18 +1184,32 @@ async function renderKpiDashboardBody(){
     return { rm, ...s };
   });
 
-  // AM-wise breakdown (sorted by avg support desc)
+  // AM-wise breakdown, enriched with visit compliance + avg raw input units
   const amList = currentAmList();
   const amStats = amList.map(am=>{
     const amRows = rows.filter(r=>r.doctor.am===am);
     const s = compiledSummary(amRows);
-    return { am, rm: (state.master.find(d=>d.am===am)||{}).rm || '', ...s };
+    const amWithData = amRows.filter(r=>r.hasData);
+    const nvdCount = amWithData.filter(r=>r.entry.amVisit==='NVD').length;
+    const visitedCount = amWithData.filter(r=>r.entry.amVisit && r.entry.amVisit!=='NVD').length;
+    const visitCoveragePct = amRows.length ? Math.round(visitedCount/amRows.length*100) : 0;
+    const avgInput = amWithData.length
+      ? amWithData.reduce((sum,r)=> sum + ALL_PRODUCT_ITEMS.reduce((s2,it)=> s2+(parseFloat(r.entry[it.id])||0), 0), 0) / amWithData.length
+      : 0;
+    const sumSupport = amWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
+    return { am, rm: (state.master.find(d=>d.am===am)||{}).rm || '', ...s, nvdCount, visitCoveragePct, avgInput, sumSupport };
   }).sort((a,b)=> b.avgSupport - a.avgSupport);
 
-  // Product group contribution (sum across all doctors with data)
+  // Product group contribution (weighted score, sum across all doctors with data)
   const groupSums = PRODUCT_GROUPS.map(g=>({
     name: g.name,
     sum: rows.reduce((s,r)=> s + (r.hasData ? r.groupTotals[g.key] : 0), 0),
+  }));
+
+  // Product-wise TOTAL UNITS this month (raw quantities, not weighted) — mirrors "unit wise product wise support"
+  const productUnitTotals = ALL_PRODUCT_ITEMS.map(it=>({
+    label: it.label,
+    total: rows.reduce((s,r)=> s + (r.entry && r.entry[it.id]!=null && r.entry[it.id]!=='' ? (parseFloat(r.entry[it.id])||0) : 0), 0),
   }));
 
   // Practice type distribution
@@ -1205,13 +1220,58 @@ async function renderKpiDashboardBody(){
   });
 
   // Visit compliance
-  const withData = rows.filter(r=>r.hasData);
   const meNvd = withData.filter(r=>r.entry.meVisit==='NVD').length;
   const meVisited = withData.filter(r=>r.entry.meVisit && r.entry.meVisit!=='NVD').length;
   const meMissing = withData.filter(r=>!r.entry.meVisit).length;
   const amNvd = withData.filter(r=>r.entry.amVisit==='NVD').length;
   const amVisited = withData.filter(r=>r.entry.amVisit && r.entry.amVisit!=='NVD').length;
   const amMissing = withData.filter(r=>!r.entry.amVisit).length;
+
+  // Doctor business segmentation — since there's no ₹ sales figure recorded, this ranks doctors by
+  // their Total Support score (the same weighted metric used everywhere else) split into performance tiers.
+  const activeRows = withData.filter(r=>r.totalSupport>0).sort((a,b)=> b.totalSupport - a.totalSupport);
+  const zeroOutputRows = withData.filter(r=>r.totalSupport===0);
+  const pendingRows = rows.filter(r=>!r.hasData);
+  const n = activeRows.length;
+  const segDefs = [
+    { label:'Top 10%',        from:0,               to:Math.ceil(n*0.10) },
+    { label:'Next 15% (10–25%)', from:Math.ceil(n*0.10), to:Math.ceil(n*0.25) },
+    { label:'Next 25% (25–50%)', from:Math.ceil(n*0.25), to:Math.ceil(n*0.50) },
+    { label:'Next 25% (50–75%)', from:Math.ceil(n*0.50), to:Math.ceil(n*0.75) },
+    { label:'Bottom 25%',      from:Math.ceil(n*0.75), to:n },
+  ];
+  const segments = segDefs.map(sd=>{
+    const segRows = activeRows.slice(sd.from, sd.to);
+    const maxV = segRows.length ? segRows[0].totalSupport : 0;
+    const minV = segRows.length ? segRows[segRows.length-1].totalSupport : 0;
+    return { label:sd.label, count:segRows.length, range: segRows.length? `${minV.toFixed(2)} – ${maxV.toFixed(2)}` : '—' };
+  });
+  segments.push({ label:'Zero Output (Non-Rxer)', count: zeroOutputRows.length, range:'0.00' });
+  segments.push({ label:'Pending (Not Updated)', count: pendingRows.length, range:'—' });
+
+  // Top 10 doctors by Total Support
+  const top10 = activeRows.slice(0, 10);
+
+  // Activity type: Sankalp (Ad-board, MRS, NBS) vs Non-Sankalp (PO10, Camp, CME, Others)
+  const SANKALP_SET = new Set(['Ad-board','MRS','NBS']);
+  const sankalpRows = withData.filter(r=> SANKALP_SET.has(r.entry.activity));
+  const nonSankalpRows = withData.filter(r=> r.entry.activity && !SANKALP_SET.has(r.entry.activity));
+  const noActivityRows = withData.filter(r=> !r.entry.activity);
+  const avgOf = (arr)=> arr.length ? arr.reduce((s,r)=>s+r.totalSupport,0)/arr.length : 0;
+
+  // Specialty-wise: Pediatric / Chest / CP (Consultant Physician) / Others
+  function specialtyBucket(sp){
+    const s = (sp||'').toLowerCase();
+    if(s.includes('pediatric') || s.includes('paediatric')) return 'Pediatric';
+    if(s.includes('chest')) return 'Chest';
+    if(s.includes('consultant physician') || s==='cp') return 'CP (Consultant Physician)';
+    return 'Others';
+  }
+  const specialtyLabels = ['Pediatric','Chest','CP (Consultant Physician)','Others'];
+  const specialtyStats = specialtyLabels.map(label=>{
+    const subset = rows.filter(r=> specialtyBucket(r.doctor.specialty)===label);
+    return { label, ...compiledSummary(subset) };
+  });
 
   body.innerHTML = `
     <div class="row-between">
@@ -1261,6 +1321,72 @@ async function renderKpiDashboardBody(){
 
     <div class="panel" style="margin-top:16px;">
       <div class="panel-pad">
+        <div class="row-between">
+          <h3 style="margin:0; font-family:Georgia,serif; color:var(--ink);">Doctor Business Segmentation</h3>
+          <span class="muted" style="font-size:12px;">Ranked by Total Support score (no ₹ sales figure is captured in this app)</span>
+        </div>
+        <div class="row" style="align-items:stretch; gap:16px; margin-top:12px;">
+          <div style="flex:1; min-width:280px;">
+            <table>
+              <thead><tr><th>Segment</th><th>No. of Dr</th><th>% of My100</th><th>Support Range</th></tr></thead>
+              <tbody>
+                ${segments.map(s=>`<tr><td>${escHtml(s.label)}</td><td class="num-cell">${s.count}</td><td class="num-cell">${summary.total? Math.round(s.count/summary.total*100):0}%</td><td class="num-cell">${s.range}</td></tr>`).join('')}
+                <tr><td><strong>Total</strong></td><td class="num-cell"><strong>${summary.total}</strong></td><td class="num-cell"><strong>100%</strong></td><td></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="flex:1; min-width:280px; height:260px;"><canvas id="chartSegmentation"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-pad">
+        <div class="row" style="align-items:stretch; gap:16px;">
+          <div style="flex:1; min-width:280px;">
+            <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Top 10 Doctors by Total Support</h3>
+            <table>
+              <thead><tr><th>#</th><th>Doctor</th><th>AM</th><th>RM</th><th>Total Support</th></tr></thead>
+              <tbody>
+                ${top10.map((r,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(r.doctor.doctor)}</strong></td><td>${escHtml(r.doctor.am)}</td><td>${escHtml(r.doctor.rm)}</td><td class="num-cell">${r.totalSupport.toFixed(2)}</td></tr>`).join('')}
+                ${top10.length===0 ? '<tr><td colspan="5" class="muted">No data yet for this month.</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
+          <div style="flex:1; min-width:280px; height:${Math.max(260, top10.length*32)}px;"><canvas id="chartTop10"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-pad">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Activity Type: Sankalp vs Non-Sankalp</h3>
+        <p class="muted" style="margin-top:-6px;">Sankalp = Ad-board, MRS, NBS. Non-Sankalp = PO10, Camp, CME, Others.</p>
+        <table>
+          <thead><tr><th>Category</th><th>No. of Dr (updated)</th><th>Avg Total Support</th></tr></thead>
+          <tbody>
+            <tr><td>Sankalp</td><td class="num-cell">${sankalpRows.length}</td><td class="num-cell">${avgOf(sankalpRows).toFixed(2)}</td></tr>
+            <tr><td>Non-Sankalp</td><td class="num-cell">${nonSankalpRows.length}</td><td class="num-cell">${avgOf(nonSankalpRows).toFixed(2)}</td></tr>
+            <tr><td>Not specified</td><td class="num-cell">${noActivityRows.length}</td><td class="num-cell">${avgOf(noActivityRows).toFixed(2)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-pad">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Specialty-wise Summary</h3>
+        <table>
+          <thead><tr><th>Specialty</th><th>Doctors</th><th>Updated</th><th>Coverage</th><th>Avg Total Support</th></tr></thead>
+          <tbody>
+            ${specialtyStats.map(s=>`<tr><td>${escHtml(s.label)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-pad">
         <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">RM-wise Summary</h3>
         <div class="table-scroll" style="max-height:280px;">
           <table>
@@ -1278,9 +1404,24 @@ async function renderKpiDashboardBody(){
         <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">AM-wise Summary (ranked by Avg Total Support)</h3>
         <div class="table-scroll" style="max-height:360px;">
           <table>
-            <thead><tr><th>#</th><th>AM</th><th>RM</th><th>Doctors</th><th>Updated</th><th>Coverage</th><th>Avg Total Support</th></tr></thead>
+            <thead><tr><th>#</th><th>AM</th><th>RM</th><th>Doctors</th><th>Updated</th><th>Coverage</th><th>NVD by AM</th><th>% Visit Coverage (AM)</th><th>Total Support</th><th>Avg Support</th><th>Avg Input (units/Dr)</th></tr></thead>
             <tbody>
-              ${amStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.am)}</strong></td><td>${escHtml(s.rm)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td></tr>`).join('')}
+              ${amStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.am)}</strong></td><td>${escHtml(s.rm)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.nvdCount}</td><td class="num-cell">${s.visitCoveragePct}%</td><td class="num-cell">${s.sumSupport.toFixed(2)}</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td><td class="num-cell">${s.avgInput.toFixed(1)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:16px;">
+      <div class="panel-pad">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Product-wise Total Units — ${monthLabel(dashState.month)}</h3>
+        <p class="muted" style="margin-top:-6px;">Raw quantities entered by AMs this month (not weighted).</p>
+        <div class="table-scroll" style="max-height:360px;">
+          <table>
+            <thead><tr><th>Product</th><th>Total Units</th></tr></thead>
+            <tbody>
+              ${productUnitTotals.map(p=>`<tr><td>${escHtml(p.label)}</td><td class="num-cell">${p.total}</td></tr>`).join('')}
             </tbody>
           </table>
         </div>
@@ -1320,6 +1461,18 @@ async function renderKpiDashboardBody(){
         type: 'doughnut',
         data: { labels: Object.keys(practiceCounts), datasets: [{ data: Object.values(practiceCounts), backgroundColor: palette }] },
         options: { responsive:true, maintainAspectRatio:false }
+      }));
+
+      __chartInstances.push(new Chart(document.getElementById('chartSegmentation'), {
+        type: 'bar',
+        data: { labels: segments.map(s=>s.label), datasets: [{ label:'No. of Dr', data: segments.map(s=>s.count), backgroundColor:'#D9713C' }] },
+        options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+      }));
+
+      __chartInstances.push(new Chart(document.getElementById('chartTop10'), {
+        type: 'bar',
+        data: { labels: top10.map(r=>r.doctor.doctor), datasets: [{ label:'Total Support', data: top10.map(r=>Number(r.totalSupport.toFixed(2))), backgroundColor:'#12504E' }] },
+        options: { indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
       }));
     }
   }catch(e){ console.error('Chart render failed', e); }
