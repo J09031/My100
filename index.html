@@ -217,7 +217,7 @@ const DEFAULT_MASTER = [{"sr":1,"rm":"Rajorshi Bhattacharya","am":"Abhijit Karma
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-08-01 04:08 UTC';
+const APP_VERSION = 'Build 2026-08-01 04:28 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -842,7 +842,7 @@ function renderDrawerBody(){
           <label>Custom activity name</label>
           <input type="text" id="f_activity_other" value="${escAttr((draft.activity && !ACTIVITY_OPTIONS.includes(draft.activity)) ? draft.activity : '')}" placeholder="Type activity name"/>
         </div>
-        <div class="fitem" style="grid-column:1/-1;"><label>Input / remarks</label><textarea id="f_input" rows="3" placeholder="Any notes about this doctor / visit...">${escHtml(draft.input||'')}</textarea></div>
+        <div class="fitem"><label>Input (numeric)</label><input type="number" id="f_input" value="${escAttr(draft.input!=null?draft.input:'')}" placeholder="e.g. 20, 25..."/></div>
       </div>
     </div>
 
@@ -1184,7 +1184,7 @@ async function renderKpiDashboardBody(){
     return { rm, ...s };
   });
 
-  // AM-wise breakdown, enriched with visit compliance + avg raw input units
+  // AM-wise breakdown, enriched with visit compliance + avg of the numeric Input field
   const amList = currentAmList();
   const amStats = amList.map(am=>{
     const amRows = rows.filter(r=>r.doctor.am===am);
@@ -1193,9 +1193,10 @@ async function renderKpiDashboardBody(){
     const nvdCount = amWithData.filter(r=>r.entry.amVisit==='NVD').length;
     const visitedCount = amWithData.filter(r=>r.entry.amVisit && r.entry.amVisit!=='NVD').length;
     const visitCoveragePct = amRows.length ? Math.round(visitedCount/amRows.length*100) : 0;
-    const avgInput = amWithData.length
-      ? amWithData.reduce((sum,r)=> sum + ALL_PRODUCT_ITEMS.reduce((s2,it)=> s2+(parseFloat(r.entry[it.id])||0), 0), 0) / amWithData.length
-      : 0;
+    const inputVals = amWithData
+      .map(r=> r.entry.input!=null && r.entry.input!=='' ? parseFloat(r.entry.input) : null)
+      .filter(v=> v!=null && !isNaN(v));
+    const avgInput = inputVals.length ? inputVals.reduce((a,b)=>a+b,0)/inputVals.length : 0;
     const sumSupport = amWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
     return { am, rm: (state.master.find(d=>d.am===am)||{}).rm || '', ...s, nvdCount, visitCoveragePct, avgInput, sumSupport };
   }).sort((a,b)=> b.avgSupport - a.avgSupport);
@@ -1402,9 +1403,10 @@ async function renderKpiDashboardBody(){
     <div class="panel" style="margin-top:16px;">
       <div class="panel-pad">
         <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">AM-wise Summary (ranked by Avg Total Support)</h3>
+        <p class="muted" style="margin-top:-8px;">Avg Input = average of the numeric value AMs enter in the Input field, across doctors updated this month.</p>
         <div class="table-scroll" style="max-height:360px;">
           <table>
-            <thead><tr><th>#</th><th>AM</th><th>RM</th><th>Doctors</th><th>Updated</th><th>Coverage</th><th>NVD by AM</th><th>% Visit Coverage (AM)</th><th>Total Support</th><th>Avg Support</th><th>Avg Input (units/Dr)</th></tr></thead>
+            <thead><tr><th>#</th><th>AM</th><th>RM</th><th>Doctors</th><th>Updated</th><th>Coverage</th><th>NVD by AM</th><th>% Visit Coverage (AM)</th><th>Total Support</th><th>Avg Support</th><th>Avg Input</th></tr></thead>
             <tbody>
               ${amStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.am)}</strong></td><td>${escHtml(s.rm)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.nvdCount}</td><td class="num-cell">${s.visitCoveragePct}%</td><td class="num-cell">${s.sumSupport.toFixed(2)}</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td><td class="num-cell">${s.avgInput.toFixed(1)}</td></tr>`).join('')}
             </tbody>
