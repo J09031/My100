@@ -226,6 +226,23 @@
     .main{ padding:14px; }
     .login-card{ padding:28px 20px; }
   }
+
+  @media print{
+    .topbar, .tabs, .toolbar, #refreshLiveBtn, #printDashBtn, #printReportBtn, #printReviewBtn,
+    #exportBtn, #syncSheetBtn, .storage-banner, .toast, .btn{ display:none !important; }
+    body{ background:#fff; }
+    .main{ padding:0; max-width:100%; }
+    .panel{ box-shadow:none; border:1px solid #ccc; break-inside:avoid; page-break-inside:avoid; margin-bottom:14px !important; }
+    .table-scroll{ max-height:none !important; overflow:visible !important; border:none; }
+    table{ font-size:10px; }
+    thead th{ position:static; }
+    .sticky-col-1, .sticky-col-2{ position:static !important; box-shadow:none !important; }
+    canvas{ max-width:100% !important; }
+    .stat-grid{ break-inside:avoid; }
+    h2.section-title{ margin-top:6px; }
+    .row-between{ display:block; }
+    .row-between select, .row-between input, .row-between label{ display:none !important; }
+  }
 </style>
 </head>
 <body>
@@ -239,7 +256,7 @@ const CREST_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAANwAAADcCA
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-08-02 05:43 UTC';
+const APP_VERSION = 'Build 2026-08-02 21:02 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -251,48 +268,58 @@ const APPS_SCRIPT_SECRET = 'wG1lRwDte5Dzs1rQwv2wzcKmFnAr5x7IJ1vG134INJ8';
 
 const PRODUCT_GROUPS = [
   { key:'ran', name:'Rantac Syrup', items:[
-    { id:'ran100', label:'Rantac Syrup 100ml', weight:125.64 },
-    { id:'ran30',  label:'Rantac Syrup 30ml',  weight:37.69 },
+    { id:'ran100', label:'Rantac Syrup 100ml', defaultWeight:125.64 },
+    { id:'ran30',  label:'Rantac Syrup 30ml',  defaultWeight:37.69 },
   ]},
   { key:'lax', name:'Laxolite', items:[
-    { id:'lax100', label:'Laxolite 100', weight:160 },
-    { id:'lax200', label:'Laxolite 200', weight:279 },
-    { id:'lax500', label:'Laxolite 500', weight:385 },
+    { id:'lax100', label:'Laxolite 100', defaultWeight:160 },
+    { id:'lax200', label:'Laxolite 200', defaultWeight:279 },
+    { id:'lax500', label:'Laxolite 500', defaultWeight:385 },
   ]},
   { key:'spo', name:'Sporlac GG', items:[
-    { id:'spogg',  label:'Sporlac GG',      weight:422 },
-    { id:'spoggd', label:'Sporlac GG Drop', weight:338 },
+    { id:'spogg',  label:'Sporlac GG',      defaultWeight:422 },
+    { id:'spoggd', label:'Sporlac GG Drop', defaultWeight:338 },
   ]},
   { key:'zd', name:'Z&D', items:[
-    { id:'zdds',    label:'Z&D DS',    weight:91 },
-    { id:'zdsyr',   label:'Z&D Syrup', weight:105 },
-    { id:'zdmulti', label:'Z&D Multi', weight:128 },
+    { id:'zdds',    label:'Z&D DS',    defaultWeight:91 },
+    { id:'zdsyr',   label:'Z&D Syrup', defaultWeight:105 },
+    { id:'zdmulti', label:'Z&D Multi', defaultWeight:128 },
   ]},
   { key:'visco', name:'Viscojoy', items:[
-    { id:'visco',   label:'Viscojoy',    weight:216 },
-    { id:'viscoab', label:'Viscojoy AB', weight:169 },
+    { id:'visco',   label:'Viscojoy',    defaultWeight:216 },
+    { id:'viscoab', label:'Viscojoy AB', defaultWeight:169 },
   ]},
   { key:'akair', name:'Akair', items:[
-    { id:'akairtab', label:'Akair LC Tab', weight:205 },
-    { id:'akairsyp', label:'Akair LC Syp', weight:94 },
+    { id:'akairtab', label:'Akair LC Tab', defaultWeight:205 },
+    { id:'akairsyp', label:'Akair LC Syp', defaultWeight:94 },
   ]},
   { key:'neb', name:'Nebulisation', items:[
-    { id:'bude05', label:'Budejoy 0.5',  weight:17.5 },
-    { id:'bude1',  label:'Budejoy 1',    weight:19.37 },
-    { id:'duta',   label:'Dutaresp',     weight:17.59 },
-    { id:'fora05', label:'Foraresp 0.5', weight:51.25 },
-    { id:'fora1',  label:'Foraresp 1',   weight:48.9 },
-    { id:'glyco',  label:'Glycoresp',    weight:25.63 },
-    { id:'leo',    label:'Leoresp',      weight:5.13 },
-    { id:'toba',   label:'Tobaresp',     weight:401.85 },
+    { id:'bude05', label:'Budejoy 0.5',  defaultWeight:17.5 },
+    { id:'bude1',  label:'Budejoy 1',    defaultWeight:19.37 },
+    { id:'duta',   label:'Dutaresp',     defaultWeight:17.59 },
+    { id:'fora05', label:'Foraresp 0.5', defaultWeight:51.25 },
+    { id:'fora1',  label:'Foraresp 1',   defaultWeight:48.9 },
+    { id:'glyco',  label:'Glycoresp',    defaultWeight:25.63 },
+    { id:'leo',    label:'Leoresp',      defaultWeight:5.13 },
+    { id:'toba',   label:'Tobaresp',     defaultWeight:401.85 },
   ]},
   { key:'pecef', name:'Pecef', items:[
-    { id:'pecef200', label:'Pecef 200',    weight:188 },
-    { id:'pecefduo',  label:'Pecef Duo',    weight:390 },
-    { id:'pecefsyr',  label:'Pecef Syrup',  weight:106 },
+    { id:'pecef200', label:'Pecef 200',    defaultWeight:188 },
+    { id:'pecefduo',  label:'Pecef Duo',    defaultWeight:390 },
+    { id:'pecefsyr',  label:'Pecef Syrup',  defaultWeight:106 },
   ]},
 ];
 const ALL_PRODUCT_ITEMS = PRODUCT_GROUPS.flatMap(g => g.items);
+function defaultDpWeights(){
+  const w = {};
+  ALL_PRODUCT_ITEMS.forEach(it => { w[it.id] = it.defaultWeight; });
+  return w;
+}
+function getDpWeight(itemId){
+  if(state.dpWeights && state.dpWeights[itemId] != null) return state.dpWeights[itemId];
+  const item = ALL_PRODUCT_ITEMS.find(it => it.id === itemId);
+  return item ? item.defaultWeight : 0;
+}
 const ACTIVITY_OPTIONS = ['Ad-board', 'MRS', 'NBS', 'PO10', 'Camp', 'CME'];
 const PRACTICE_OPTIONS = ['Trade/Clinic', 'Govt Hospital', 'Rural Hospital', 'Medical College', 'Corporate Hospital', 'Nursing Home'];
 function normalizePractice(v){
@@ -341,6 +368,8 @@ const state = {
   drawerDoctor: null, // doctor record currently open in drawer
   drawerDraft: null,  // draft entry object being edited
   masterEditDraft: null, // draft doctor record being edited in Master Data quick-edit
+  dpWeights: null,   // current live DP (price) weights per product, admin-editable
+  dpWeightsMeta: null, // { updatedAt, updatedBy }
   connectionOK: true, // false once a backend call fails
   lastSyncedAt: null,  // Date of the last successful backend call
 };
@@ -531,6 +560,33 @@ async function saveMaster(newMaster, byWhom){
   return false;
 }
 
+async function loadDpWeights(){
+  const raw = await storageGet('my100_dp_weights', true);
+  const defaults = defaultDpWeights();
+  if(raw){
+    try{
+      const saved = JSON.parse(raw);
+      state.dpWeights = Object.assign({}, defaults, saved); // any new products added later still get a sensible default
+    }catch(e){ state.dpWeights = defaults; }
+  } else {
+    state.dpWeights = defaults;
+  }
+  const metaRaw = await storageGet('my100_dp_weights_meta', true);
+  state.dpWeightsMeta = metaRaw ? JSON.parse(metaRaw) : { updatedAt:null, updatedBy:'(original defaults)' };
+}
+
+async function saveDpWeights(newWeights, byWhom){
+  const ok1 = await storageSet('my100_dp_weights', JSON.stringify(newWeights), true);
+  const meta = { updatedAt: new Date().toISOString(), updatedBy: byWhom };
+  const ok2 = await storageSet('my100_dp_weights_meta', JSON.stringify(meta), true);
+  if(ok1 && ok2){
+    state.dpWeights = newWeights;
+    state.dpWeightsMeta = meta;
+    return true;
+  }
+  return false;
+}
+
 async function loadEntriesForAmMonth(am, month){
   const cacheKey = am+'__'+month;
   if(state.entriesCache[cacheKey]) return state.entriesCache[cacheKey];
@@ -555,7 +611,7 @@ function computeGroupTotal(entry, group){
   let sum = 0;
   group.items.forEach(it=>{
     const v = parseFloat(entry[it.id]);
-    if(!isNaN(v)) sum += v * it.weight;
+    if(!isNaN(v)) sum += v * getDpWeight(it.id);
   });
   return sum/100000;
 }
@@ -564,7 +620,7 @@ function computeTotalSupport(entry){
   let sum = 0;
   ALL_PRODUCT_ITEMS.forEach(it=>{
     const v = parseFloat(entry[it.id]);
-    if(!isNaN(v)) sum += v * it.weight;
+    if(!isNaN(v)) sum += v * getDpWeight(it.id);
   });
   return sum/100000;
 }
@@ -573,6 +629,23 @@ function computePatMonth(entry){
   const d = parseFloat(entry.patDay), p = parseFloat(entry.pracDay);
   if(isNaN(d) || isNaN(p)) return '';
   return d*p;
+}
+
+/* Shared stats helpers (also duplicated locally inside renderKpiDashboardBody for its own scope) */
+function visitStatsShared(rowsSubset, visitField){
+  const withD = rowsSubset.filter(r=>r.hasData);
+  const nvdCount = withD.filter(r=>r.entry[visitField]==='NVD').length;
+  const visitedCount = withD.filter(r=>r.entry[visitField] && r.entry[visitField]!=='NVD').length;
+  const coveragePct = rowsSubset.length ? Math.round(visitedCount/rowsSubset.length*100) : 0;
+  return { nvdCount, visitedCount, coveragePct };
+}
+function inputStatsShared(withDataRows){
+  const vals = withDataRows
+    .map(r=> r.entry.input!=null && r.entry.input!=='' ? parseFloat(r.entry.input) : null)
+    .filter(v=> v!=null && !isNaN(v));
+  const totalInput = vals.reduce((a,b)=>a+b,0);
+  const avgInput = vals.length ? totalInput/vals.length : 0;
+  return { totalInput, avgInput, reportingCount: vals.length };
 }
 
 function currentAmList(){
@@ -608,12 +681,14 @@ async function boot(){
   }catch(e){}
   root.innerHTML = `<div class="empty" style="padding-top:80px;"><div class="big">⏳</div>Loading My100 RCPA…</div>`;
   await loadMaster();
+  await loadDpWeights();
   renderLogin();
 }
 
 function retryConnection(){
   showToast('Checking connection…');
   loadMaster().then(async ()=>{
+    await loadDpWeights();
     if(state.connectionOK){
       showToast('Connected ✔');
     } else {
@@ -631,6 +706,7 @@ async function refreshLiveData(){
   showToast('Refreshing live data…');
   state.entriesCache = {}; // force fresh fetch instead of using anything cached this session
   await loadMaster();
+  await loadDpWeights();
   if(state.role==='am'){
     await renderAmDashboard();
   } else {
@@ -1167,6 +1243,9 @@ async function renderCompiledDashboard(role){
       ${isAdmin ? `
       <div class="tabs">
         <div class="tab ${state.adminTab==='dashboard'?'active':''}" data-tab="dashboard">📊 Dashboard</div>
+        <div class="tab ${state.adminTab==='am_review'?'active':''}" data-tab="am_review">👤 AM Review</div>
+        <div class="tab ${state.adminTab==='rm_review'?'active':''}" data-tab="rm_review">🧭 RM Review</div>
+        <div class="tab ${state.adminTab==='me_review'?'active':''}" data-tab="me_review">🩺 ME Review</div>
         <div class="tab ${state.adminTab==='report'?'active':''}" data-tab="report">Compiled Report</div>
         <div class="tab ${state.adminTab==='master'?'active':''}" data-tab="master">Doctor Master Data</div>
       </div>` : ''}
@@ -1188,6 +1267,18 @@ async function renderCompiledDashboard(role){
     await renderKpiDashboardBody();
     return;
   }
+  if(isAdmin && state.adminTab==='am_review'){
+    await renderAmReviewBody();
+    return;
+  }
+  if(isAdmin && state.adminTab==='rm_review'){
+    await renderRmReviewBody();
+    return;
+  }
+  if(isAdmin && state.adminTab==='me_review'){
+    await renderMeReviewBody();
+    return;
+  }
   renderReportBody(role, scopeDoctors, filteredRows, summary, amOptions, preFilterScope);
 }
 
@@ -1202,6 +1293,7 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
         ${monthSelectHtml('monthSelect', compState.month)}
         <button class="btn btn-outline" id="refreshLiveBtn" title="Bypass cache and pull the latest saved data">🔄 Refresh Live Data</button>
         <button class="btn btn-outline" id="syncSheetBtn">📄 Sync to Google Sheet</button>
+        <button class="btn btn-outline" id="printReportBtn">🖨 Print / Save PDF</button>
         <button class="btn btn-primary" id="exportBtn">⬇ Download Excel</button>
       </div>
     </div>
@@ -1209,7 +1301,7 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
       <div class="stat"><div class="num">${summary.total}</div><div class="lbl">Doctors in scope</div></div>
       <div class="stat"><div class="num">${summary.done}</div><div class="lbl">Updated for ${monthLabel(compState.month)}</div></div>
       <div class="stat"><div class="num">${summary.pending}</div><div class="lbl">Pending</div></div>
-      <div class="stat"><div class="num">${summary.coverage}%</div><div class="lbl">Coverage</div></div>
+      <div class="stat"><div class="num">${summary.coverage}%</div><div class="lbl">Updated %</div></div>
       <div class="stat"><div class="num">${summary.avgSupport.toFixed(2)}</div><div class="lbl">Avg. Total Support</div></div>
     </div>
     <div class="panel">
@@ -1265,6 +1357,7 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
   document.getElementById('exportBtn').addEventListener('click', ()=> exportRowsToExcel(rows));
   document.getElementById('syncSheetBtn').addEventListener('click', ()=> syncRowsToSheet(rows, compState.month));
   document.getElementById('refreshLiveBtn').addEventListener('click', refreshLiveData);
+  document.getElementById('printReportBtn').addEventListener('click', ()=> window.print());
 }
 
 function exportRowsToExcel(rows, monthOverride){
@@ -1344,30 +1437,46 @@ async function renderKpiDashboardBody(){
   const summary = compiledSummary(rows);
   const withData = rows.filter(r=>r.hasData);
 
-  // RM-wise breakdown
+  // shared helper: visit compliance stats for a given visit field within a set of rows
+  function visitStats(rowsSubset, visitField){
+    const withD = rowsSubset.filter(r=>r.hasData);
+    const nvdCount = withD.filter(r=>r.entry[visitField]==='NVD').length;
+    const visitedCount = withD.filter(r=>r.entry[visitField] && r.entry[visitField]!=='NVD').length;
+    const coveragePct = rowsSubset.length ? Math.round(visitedCount/rowsSubset.length*100) : 0;
+    return { nvdCount, visitedCount, coveragePct };
+  }
+  // shared helper: numeric Input field totals for a set of already-hasData rows
+  function inputStats(withDataRows){
+    const vals = withDataRows
+      .map(r=> r.entry.input!=null && r.entry.input!=='' ? parseFloat(r.entry.input) : null)
+      .filter(v=> v!=null && !isNaN(v));
+    const totalInput = vals.reduce((a,b)=>a+b,0);
+    const avgInput = vals.length ? totalInput/vals.length : 0;
+    return { totalInput, avgInput, reportingCount: vals.length };
+  }
+
+  // RM-wise breakdown — mirrors AM-wise structure exactly, plus Total Input
   const rmList = currentRmList();
   const rmStats = rmList.map(rm=>{
     const rmRows = rows.filter(r=>r.doctor.rm===rm);
     const s = compiledSummary(rmRows);
-    return { rm, ...s };
-  });
+    const rmWithData = rmRows.filter(r=>r.hasData);
+    const vs = visitStats(rmRows, 'rmVisit');
+    const is = inputStats(rmWithData);
+    const sumSupport = rmWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
+    return { rm, ...s, nvdCount: vs.nvdCount, visitCoveragePct: vs.coveragePct, sumSupport, ...is };
+  }).sort((a,b)=> b.avgSupport - a.avgSupport);
 
-  // AM-wise breakdown, enriched with visit compliance + avg of the numeric Input field
+  // AM-wise breakdown, enriched with visit compliance + numeric Input totals
   const amList = currentAmList();
   const amStats = amList.map(am=>{
     const amRows = rows.filter(r=>r.doctor.am===am);
     const s = compiledSummary(amRows);
     const amWithData = amRows.filter(r=>r.hasData);
-    const nvdCount = amWithData.filter(r=>r.entry.amVisit==='NVD').length;
-    const visitedCount = amWithData.filter(r=>r.entry.amVisit && r.entry.amVisit!=='NVD').length;
-    const visitCoveragePct = amRows.length ? Math.round(visitedCount/amRows.length*100) : 0;
-    const inputVals = amWithData
-      .map(r=> r.entry.input!=null && r.entry.input!=='' ? parseFloat(r.entry.input) : null)
-      .filter(v=> v!=null && !isNaN(v));
-    const avgInput = inputVals.length ? inputVals.reduce((a,b)=>a+b,0)/inputVals.length : 0;
-    const inputReportingCount = inputVals.length;
+    const vs = visitStats(amRows, 'amVisit');
+    const is = inputStats(amWithData);
     const sumSupport = amWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
-    return { am, rm: (state.master.find(d=>d.am===am)||{}).rm || '', ...s, nvdCount, visitCoveragePct, avgInput, inputReportingCount, sumSupport };
+    return { am, rm: (state.master.find(d=>d.am===am)||{}).rm || '', ...s, nvdCount: vs.nvdCount, visitCoveragePct: vs.coveragePct, sumSupport, ...is };
   }).sort((a,b)=> b.avgSupport - a.avgSupport);
 
   // Product group contribution (weighted score, sum across all doctors with data)
@@ -1389,38 +1498,32 @@ async function renderKpiDashboardBody(){
     practiceCounts[p] = (practiceCounts[p]||0) + 1;
   });
 
-  // Visit compliance
-  const meNvd = withData.filter(r=>r.entry.meVisit==='NVD').length;
-  const meVisited = withData.filter(r=>r.entry.meVisit && r.entry.meVisit!=='NVD').length;
+  // Visit compliance (company-wide)
+  const meStatsOverall = visitStats(rows, 'meVisit');
+  const amStatsOverall = visitStats(rows, 'amVisit');
   const meMissing = withData.filter(r=>!r.entry.meVisit).length;
-  const amNvd = withData.filter(r=>r.entry.amVisit==='NVD').length;
-  const amVisited = withData.filter(r=>r.entry.amVisit && r.entry.amVisit!=='NVD').length;
   const amMissing = withData.filter(r=>!r.entry.amVisit).length;
 
-  // Doctor business segmentation — since there's no ₹ sales figure recorded, this ranks doctors by
-  // their Total Support score (the same weighted metric used everywhere else) split into performance tiers.
-  const activeRows = withData.filter(r=>r.totalSupport>0).sort((a,b)=> b.totalSupport - a.totalSupport);
-  const zeroOutputRows = withData.filter(r=>r.totalSupport===0);
-  const pendingRows = rows.filter(r=>!r.hasData);
-  const n = activeRows.length;
-  const segDefs = [
-    { label:'Top 10%',        from:0,               to:Math.ceil(n*0.10) },
-    { label:'Next 15% (10–25%)', from:Math.ceil(n*0.10), to:Math.ceil(n*0.25) },
-    { label:'Next 25% (25–50%)', from:Math.ceil(n*0.25), to:Math.ceil(n*0.50) },
-    { label:'Next 25% (50–75%)', from:Math.ceil(n*0.50), to:Math.ceil(n*0.75) },
-    { label:'Bottom 25%',      from:Math.ceil(n*0.75), to:n },
+  // Doctor business segmentation — Total Support is already expressed in Lac units (the
+  // original formula divides the DP-weighted sum by 100000), so these are the same
+  // fixed ₹-value bands from the KPI template, applied directly to Total Support.
+  const segBuckets = [
+    { label:'MORE THAN 1 LAC',     test:(ts,hd)=> hd && ts>=1 },
+    { label:'BETWEEN 75K-100K',    test:(ts,hd)=> hd && ts>=0.75 && ts<1 },
+    { label:'BETWEEN 50K-75K',     test:(ts,hd)=> hd && ts>=0.50 && ts<0.75 },
+    { label:'BETWEEN 25K-50K',     test:(ts,hd)=> hd && ts>=0.25 && ts<0.50 },
+    { label:'BETWEEN 10-25K',      test:(ts,hd)=> hd && ts>=0.10 && ts<0.25 },
+    { label:'LESS THAN 10K',       test:(ts,hd)=> hd && ts>0 && ts<0.10 },
   ];
-  const segments = segDefs.map(sd=>{
-    const segRows = activeRows.slice(sd.from, sd.to);
-    const maxV = segRows.length ? segRows[0].totalSupport : 0;
-    const minV = segRows.length ? segRows[segRows.length-1].totalSupport : 0;
-    return { label:sd.label, count:segRows.length, range: segRows.length? `${minV.toFixed(2)} – ${maxV.toFixed(2)}` : '—' };
-  });
-  segments.push({ label:'Zero Output (Non-Rxer)', count: zeroOutputRows.length, range:'0.00' });
-  segments.push({ label:'Pending (Not Updated)', count: pendingRows.length, range:'—' });
+  const segments = segBuckets.map(b=>({
+    label: b.label,
+    count: rows.filter(r=> b.test(r.totalSupport, r.hasData)).length,
+  }));
+  const bucketedCount = segments.reduce((s,seg)=>s+seg.count,0);
+  segments.push({ label:'NON RXER', count: summary.total - bucketedCount }); // zero-output + not-yet-updated doctors
 
   // Top 10 doctors by Total Support
-  const top10 = activeRows.slice(0, 10);
+  const top10 = withData.filter(r=>r.totalSupport>0).sort((a,b)=> b.totalSupport - a.totalSupport).slice(0, 10);
 
   // Activity type: Sankalp (Ad-board, MRS, NBS) vs Non-Sankalp (PO10, Camp, CME, Others)
   const SANKALP_SET = new Set(['Ad-board','MRS','NBS']);
@@ -1428,6 +1531,19 @@ async function renderKpiDashboardBody(){
   const nonSankalpRows = withData.filter(r=> r.entry.activity && !SANKALP_SET.has(r.entry.activity));
   const noActivityRows = withData.filter(r=> !r.entry.activity);
   const avgOf = (arr)=> arr.length ? arr.reduce((s,r)=>s+r.totalSupport,0)/arr.length : 0;
+  const sumOf = (arr)=> arr.reduce((s,r)=>s+r.totalSupport,0);
+  const activityCategories = [
+    { label:'Sankalp', rows: sankalpRows },
+    { label:'Non-Sankalp', rows: nonSankalpRows },
+    { label:'Not specified', rows: noActivityRows },
+  ].map(cat=>{
+    const mv = visitStats(cat.rows, 'meVisit');
+    const av = visitStats(cat.rows, 'amVisit');
+    const rv = visitStats(cat.rows, 'rmVisit');
+    const is = inputStats(cat.rows);
+    return { label: cat.label, count: cat.rows.length, meVisitPct: mv.coveragePct, amVisitPct: av.coveragePct, rmVisitPct: rv.coveragePct,
+      totalSupport: sumOf(cat.rows), avgSupport: avgOf(cat.rows), totalInput: is.totalInput, avgInput: is.avgInput };
+  });
 
   // Specialty-wise: Pediatric / Chest / CP (Consultant Physician) / Others
   function specialtyBucket(sp){
@@ -1453,27 +1569,28 @@ async function renderKpiDashboardBody(){
         <label class="muted" style="font-size:12.5px;">Month</label>
         ${monthSelectHtml('dashMonthSelect', dashState.month)}
         <button class="btn btn-outline" id="refreshLiveBtn" title="Bypass cache and pull the latest saved data">🔄 Refresh Live Data</button>
+        <button class="btn btn-outline" id="printDashBtn">🖨 Print / Save PDF</button>
       </div>
     </div>
 
     <div class="stat-grid">
       <div class="stat"><div class="num">${summary.total}</div><div class="lbl">Total doctors (My100)</div></div>
       <div class="stat"><div class="num">${summary.done}</div><div class="lbl">Updated for ${monthLabel(dashState.month)}</div></div>
-      <div class="stat"><div class="num">${summary.coverage}%</div><div class="lbl">Overall coverage</div></div>
+      <div class="stat"><div class="num">${summary.coverage}%</div><div class="lbl">Overall Updated %</div></div>
+      <div class="stat"><div class="num">${amStatsOverall.coveragePct}%</div><div class="lbl">Overall Coverage (AM Visit)</div></div>
       <div class="stat"><div class="num">${summary.avgSupport.toFixed(2)}</div><div class="lbl">Avg. Total Support</div></div>
-      <div class="stat"><div class="num">${rows.reduce((s,r)=>s+(r.hasData?r.totalSupport:0),0).toFixed(2)}</div><div class="lbl">Sum Total Support</div></div>
     </div>
 
     <div class="stat-grid">
-      <div class="stat"><div class="num">${meVisited}</div><div class="lbl">ME visits recorded</div></div>
-      <div class="stat"><div class="num" style="color:var(--warn);">${meNvd}</div><div class="lbl">ME — No Visit (NVD)</div></div>
-      <div class="stat"><div class="num">${amVisited}</div><div class="lbl">AM visits recorded</div></div>
-      <div class="stat"><div class="num" style="color:var(--warn);">${amNvd}</div><div class="lbl">AM — No Visit (NVD)</div></div>
+      <div class="stat"><div class="num">${meStatsOverall.visitedCount}</div><div class="lbl">ME visits recorded</div></div>
+      <div class="stat"><div class="num" style="color:var(--warn);">${meStatsOverall.nvdCount}</div><div class="lbl">ME — No Visit (NVD)</div></div>
+      <div class="stat"><div class="num">${amStatsOverall.visitedCount}</div><div class="lbl">AM visits recorded</div></div>
+      <div class="stat"><div class="num" style="color:var(--warn);">${amStatsOverall.nvdCount}</div><div class="lbl">AM — No Visit (NVD)</div></div>
       <div class="stat"><div class="num">${meMissing+amMissing}</div><div class="lbl">Missing visit data (older entries)</div></div>
     </div>
 
     <div class="panel panel-pad" style="margin-bottom:16px;">
-      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Coverage by RM</h3>
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Coverage by RM (RM Visit Compliance %)</h3>
       <div style="height:260px;"><canvas id="chartRmCoverage"></canvas></div>
     </div>
 
@@ -1497,15 +1614,15 @@ async function renderKpiDashboardBody(){
       <div class="panel-pad">
         <div class="row-between">
           <h3 style="margin:0; font-family:Georgia,serif; color:var(--ink);">Doctor Business Segmentation</h3>
-          <span class="muted" style="font-size:12px;">Ranked by Total Support score (no ₹ sales figure is captured in this app)</span>
+          <span class="muted" style="font-size:12px;">Total Support is already in Lac (₹100,000) units, so these bands map directly to it</span>
         </div>
         <div class="row" style="align-items:flex-start; gap:16px; margin-top:12px;">
           <div style="flex:1; min-width:280px;">
             <table>
-              <thead><tr><th>Segment</th><th class="num-header">No. of Dr</th><th class="num-header">% of My100</th><th class="num-header">Support Range</th></tr></thead>
+              <thead><tr><th>Description</th><th class="num-header">No of Dr</th><th class="num-header">%</th></tr></thead>
               <tbody>
-                ${segments.map(s=>`<tr><td>${escHtml(s.label)}</td><td class="num-cell">${s.count}</td><td class="num-cell">${summary.total? Math.round(s.count/summary.total*100):0}%</td><td class="num-cell">${s.range}</td></tr>`).join('')}
-                <tr><td><strong>Total</strong></td><td class="num-cell"><strong>${summary.total}</strong></td><td class="num-cell"><strong>100%</strong></td><td></td></tr>
+                ${segments.map(s=>`<tr><td>${escHtml(s.label)}</td><td class="num-cell">${s.count}</td><td class="num-cell">${summary.total? (s.count/summary.total*100).toFixed(2):'0.00'}%</td></tr>`).join('')}
+                <tr><td><strong>Total Dr</strong></td><td class="num-cell"><strong>${summary.total}</strong></td><td class="num-cell"><strong>100.00%</strong></td></tr>
               </tbody>
             </table>
           </div>
@@ -1520,10 +1637,10 @@ async function renderKpiDashboardBody(){
           <div style="flex:1; min-width:280px;">
             <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Top 10 Doctors by Total Support</h3>
             <table>
-              <thead><tr><th class="num-header">#</th><th>Doctor</th><th>AM</th><th>RM</th><th class="num-header">Total Support</th></tr></thead>
+              <thead><tr><th class="num-header">#</th><th>Doctor</th><th>AM</th><th class="num-header">Total Support</th><th>Activity</th><th class="num-header">Input</th></tr></thead>
               <tbody>
-                ${top10.map((r,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(r.doctor.doctor)}</strong></td><td>${escHtml(r.doctor.am)}</td><td>${escHtml(r.doctor.rm)}</td><td class="num-cell">${r.totalSupport.toFixed(2)}</td></tr>`).join('')}
-                ${top10.length===0 ? '<tr><td colspan="5" class="muted">No data yet for this month.</td></tr>' : ''}
+                ${top10.map((r,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(r.doctor.doctor)}</strong></td><td>${escHtml(r.doctor.am)}</td><td class="num-cell">${r.totalSupport.toFixed(2)}</td><td>${escHtml(r.entry.activity||'')}</td><td class="num-cell">${r.entry.input!=null && r.entry.input!=='' ? parseFloat(r.entry.input).toFixed(2) : ''}</td></tr>`).join('')}
+                ${top10.length===0 ? '<tr><td colspan="6" class="muted">No data yet for this month.</td></tr>' : ''}
               </tbody>
             </table>
           </div>
@@ -1535,15 +1652,15 @@ async function renderKpiDashboardBody(){
     <div class="panel" style="margin-top:16px;">
       <div class="panel-pad">
         <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Activity Type: Sankalp vs Non-Sankalp</h3>
-        <p class="muted" style="margin-top:-6px;">Sankalp = Ad-board, MRS, NBS. Non-Sankalp = PO10, Camp, CME, Others.</p>
-        <table>
-          <thead><tr><th>Category</th><th class="num-header">No. of Dr (updated)</th><th class="num-header">Avg Total Support</th></tr></thead>
-          <tbody>
-            <tr><td>Sankalp</td><td class="num-cell">${sankalpRows.length}</td><td class="num-cell">${avgOf(sankalpRows).toFixed(2)}</td></tr>
-            <tr><td>Non-Sankalp</td><td class="num-cell">${nonSankalpRows.length}</td><td class="num-cell">${avgOf(nonSankalpRows).toFixed(2)}</td></tr>
-            <tr><td>Not specified</td><td class="num-cell">${noActivityRows.length}</td><td class="num-cell">${avgOf(noActivityRows).toFixed(2)}</td></tr>
-          </tbody>
-        </table>
+        <p class="muted" style="margin-top:-6px;">Sankalp = Ad-board, MRS, NBS. Non-Sankalp = PO10, Camp, CME, Others. Visit % columns show compliance within each category.</p>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Category</th><th class="num-header">No. of Dr</th><th class="num-header">ME Visit</th><th class="num-header">AM Visit</th><th class="num-header">RM Visit</th><th class="num-header">Total Support</th><th class="num-header">Avg Support</th><th class="num-header">Total Input</th><th class="num-header">Avg Input</th></tr></thead>
+            <tbody>
+              ${activityCategories.map(c=>`<tr><td>${escHtml(c.label)}</td><td class="num-cell">${c.count}</td><td class="num-cell">${c.meVisitPct}%</td><td class="num-cell">${c.amVisitPct}%</td><td class="num-cell">${c.rmVisitPct}%</td><td class="num-cell">${c.totalSupport.toFixed(2)}</td><td class="num-cell">${c.avgSupport.toFixed(2)}</td><td class="num-cell">${c.totalInput.toFixed(2)}</td><td class="num-cell">${c.avgInput.toFixed(2)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -1551,7 +1668,7 @@ async function renderKpiDashboardBody(){
       <div class="panel-pad">
         <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Specialty-wise Summary</h3>
         <table>
-          <thead><tr><th>Specialty</th><th class="num-header">Doctors</th><th class="num-header">Updated</th><th class="num-header">Coverage</th><th class="num-header">Avg Total Support</th></tr></thead>
+          <thead><tr><th>Specialty</th><th class="num-header">Doctors</th><th class="num-header">Updated</th><th class="num-header">Updated %</th><th class="num-header">Avg Total Support</th></tr></thead>
           <tbody>
             ${specialtyStats.map(s=>`<tr><td>${escHtml(s.label)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td></tr>`).join('')}
           </tbody>
@@ -1561,12 +1678,13 @@ async function renderKpiDashboardBody(){
 
     <div class="panel" style="margin-top:16px;">
       <div class="panel-pad">
-        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">RM-wise Summary</h3>
-        <div class="table-scroll" style="max-height:280px;">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">RM-wise Summary (ranked by Avg Total Support)</h3>
+        <p class="muted" style="margin-top:-8px;">Coverage = % of doctors with an actual RM visit recorded (not NVD, not blank). Updated % = % of doctors with any data entered this month.</p>
+        <div class="table-scroll" style="max-height:360px;">
           <table>
-            <thead><tr><th>RM</th><th class="num-header">Doctors</th><th class="num-header">Updated</th><th class="num-header">Pending</th><th class="num-header">Coverage</th><th class="num-header">Avg Total Support</th></tr></thead>
+            <thead><tr><th class="num-header">#</th><th>RM</th><th class="num-header">Doctors</th><th class="num-header">Updated</th><th class="num-header">Updated %</th><th class="num-header">Coverage</th><th class="num-header">NVD by RM</th><th class="num-header">Total Support</th><th class="num-header">Avg Support</th><th class="num-header">Total Input</th><th class="num-header">Avg Input</th></tr></thead>
             <tbody>
-              ${rmStats.map(s=>`<tr><td><strong>${escHtml(s.rm)}</strong></td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.pending}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td></tr>`).join('')}
+              ${rmStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.rm)}</strong></td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.visitCoveragePct}%</td><td class="num-cell">${s.nvdCount}</td><td class="num-cell">${s.sumSupport.toFixed(2)}</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td><td class="num-cell">${s.totalInput.toFixed(2)}</td><td class="num-cell">${s.avgInput.toFixed(2)}</td></tr>`).join('')}
             </tbody>
           </table>
         </div>
@@ -1576,12 +1694,12 @@ async function renderKpiDashboardBody(){
     <div class="panel" style="margin-top:16px;">
       <div class="panel-pad">
         <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">AM-wise Summary (ranked by Avg Total Support)</h3>
-        <p class="muted" style="margin-top:-8px;">Avg Input = average of the numeric value AMs enter in the Input field, across doctors updated this month. The number in brackets is how many of those doctors actually had a numeric value entered (older entries saved before Input became numeric are excluded, not counted as zero).</p>
+        <p class="muted" style="margin-top:-8px;">Coverage = % of doctors with an actual AM visit recorded (not NVD, not blank). Updated % = % of doctors with any data entered this month.</p>
         <div class="table-scroll" style="max-height:360px;">
           <table>
-            <thead><tr><th class="num-header">#</th><th>AM</th><th>RM</th><th class="num-header">Doctors</th><th class="num-header">Updated</th><th class="num-header">Coverage</th><th class="num-header">NVD by AM</th><th class="num-header">% Visit Coverage (AM)</th><th class="num-header">Total Support</th><th class="num-header">Avg Support</th><th class="num-header">Avg Input</th></tr></thead>
+            <thead><tr><th class="num-header">#</th><th>AM</th><th>RM</th><th class="num-header">Doctors</th><th class="num-header">Updated</th><th class="num-header">Updated %</th><th class="num-header">Coverage</th><th class="num-header">NVD by AM</th><th class="num-header">Total Support</th><th class="num-header">Avg Support</th><th class="num-header">Total Input</th><th class="num-header">Avg Input</th></tr></thead>
             <tbody>
-              ${amStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.am)}</strong></td><td>${escHtml(s.rm)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.nvdCount}</td><td class="num-cell">${s.visitCoveragePct}%</td><td class="num-cell">${s.sumSupport.toFixed(2)}</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td><td class="num-cell">${s.avgInput.toFixed(1)} <span class="muted" style="font-size:11px;">(${s.inputReportingCount})</span></td></tr>`).join('')}
+              ${amStats.map((s,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(s.am)}</strong></td><td>${escHtml(s.rm)}</td><td class="num-cell">${s.total}</td><td class="num-cell">${s.done}</td><td class="num-cell">${s.coverage}%</td><td class="num-cell">${s.visitCoveragePct}%</td><td class="num-cell">${s.nvdCount}</td><td class="num-cell">${s.sumSupport.toFixed(2)}</td><td class="num-cell">${s.avgSupport.toFixed(2)}</td><td class="num-cell">${s.totalInput.toFixed(2)}</td><td class="num-cell">${s.avgInput.toFixed(2)} <span class="muted" style="font-size:11px;">(${s.reportingCount})</span></td></tr>`).join('')}
             </tbody>
           </table>
         </div>
@@ -1609,6 +1727,7 @@ async function renderKpiDashboardBody(){
     renderKpiDashboardBody();
   });
   document.getElementById('refreshLiveBtn').addEventListener('click', refreshLiveData);
+  document.getElementById('printDashBtn').addEventListener('click', ()=> window.print());
 
   destroyCharts();
   try{
@@ -1617,7 +1736,7 @@ async function renderKpiDashboardBody(){
 
       __chartInstances.push(new Chart(document.getElementById('chartRmCoverage'), {
         type: 'bar',
-        data: { labels: rmStats.map(s=>s.rm), datasets: [{ label:'Coverage %', data: rmStats.map(s=>s.coverage), backgroundColor:'#9966CC' }] },
+        data: { labels: rmStats.map(s=>s.rm), datasets: [{ label:'RM Visit Coverage %', data: rmStats.map(s=>s.visitCoveragePct), backgroundColor:'#9966CC' }] },
         options: { responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, max:100 } }, plugins:{ legend:{ display:false } } }
       }));
 
@@ -1654,10 +1773,227 @@ async function renderKpiDashboardBody(){
   }catch(e){ console.error('Chart render failed', e); }
 }
 
+/* ============ ADMIN: AM / RM / ME REVIEW TABS ============ */
+let reviewState = { am: null, rm: null, me: null, month: state.currentMonth };
+
+function reviewDoctorTableHtml(idPrefix, rowsSubset){
+  return `
+    <div class="table-scroll" style="max-height:360px;">
+      <table>
+        <thead><tr><th>Sr</th><th>Doctor</th><th>Specialty</th><th>Location</th><th>Practice</th><th class="num-header">Total Support</th><th>Activity</th><th>ME Visit</th><th>AM Visit</th><th>RM Visit</th><th>Status</th></tr></thead>
+        <tbody>
+          ${rowsSubset.map(r=>{
+            const e = r.entry || {};
+            return `<tr>
+              <td>${r.doctor.sr}</td><td><strong>${escHtml(r.doctor.doctor)}</strong></td><td>${escHtml(r.doctor.specialty)}</td><td>${escHtml(r.doctor.location)}</td>
+              <td>${escHtml(e.practice || normalizePractice(r.doctor.practice) || r.doctor.practice)}</td>
+              <td class="num-cell">${r.hasData? r.totalSupport.toFixed(2):''}</td><td>${escHtml(e.activity||'')}</td>
+              <td>${visitChip(e.meVisit)}</td><td>${visitChip(e.amVisit)}</td><td>${visitChip(e.rmVisit)}</td>
+              <td>${r.hasData?'<span class="status-chip status-done">Saved</span>':'<span class="status-chip status-pending">Pending</span>'}</td>
+            </tr>`;
+          }).join('')}
+          ${rowsSubset.length===0 ? '<tr><td colspan="11" class="muted" style="text-align:center; padding:14px;">No doctors found.</td></tr>' : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function renderAmReviewBody(){
+  reviewState.month = reviewState.month || state.currentMonth;
+  const body = document.getElementById('dashBody');
+  body.innerHTML = `<div class="empty" style="padding-top:60px;"><div class="big">👤</div>Loading AM review…</div>`;
+
+  const amList = currentAmList();
+  if(!reviewState.am || !amList.includes(reviewState.am)) reviewState.am = amList[0];
+
+  const rows = await buildCompiledRows(state.master, reviewState.month);
+  const amRows = rows.filter(r=>r.doctor.am===reviewState.am);
+  const s = compiledSummary(amRows);
+  const amWithData = amRows.filter(r=>r.hasData);
+  const meV = visitStatsShared(amRows, 'meVisit');
+  const amV = visitStatsShared(amRows, 'amVisit');
+  const isInput = inputStatsShared(amWithData);
+  const sumSupport = amWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
+  const groupSums = PRODUCT_GROUPS.map(g=>({ name:g.name, sum: amRows.reduce((s2,r)=> s2+(r.hasData? r.groupTotals[g.key]:0), 0) }));
+
+  body.innerHTML = `
+    <div class="row-between">
+      <h2 class="section-title">👤 AM Review</h2>
+      <div class="row">
+        <label class="muted" style="font-size:12.5px;">AM</label>
+        <select id="reviewAmSelect">${amList.map(a=>`<option value="${escAttr(a)}" ${a===reviewState.am?'selected':''}>${a}</option>`).join('')}</select>
+        <label class="muted" style="font-size:12.5px;">Month</label>
+        ${monthSelectHtml('reviewAmMonth', reviewState.month)}
+        <button class="btn btn-outline" id="printReviewBtn">🖨 Print / Save PDF</button>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${s.total}</div><div class="lbl">Doctors assigned</div></div>
+      <div class="stat"><div class="num">${s.done}</div><div class="lbl">Updated (${s.coverage}%)</div></div>
+      <div class="stat"><div class="num">${amV.coveragePct}%</div><div class="lbl">Coverage (AM Visit)</div></div>
+      <div class="stat"><div class="num" style="color:var(--warn);">${amV.nvdCount}</div><div class="lbl">AM — No Visit (NVD)</div></div>
+      <div class="stat"><div class="num">${sumSupport.toFixed(2)}</div><div class="lbl">Total Support</div></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${(s.done? sumSupport/s.done:0).toFixed(2)}</div><div class="lbl">Avg Support</div></div>
+      <div class="stat"><div class="num">${isInput.totalInput.toFixed(2)}</div><div class="lbl">Total Input</div></div>
+      <div class="stat"><div class="num">${isInput.avgInput.toFixed(2)}</div><div class="lbl">Avg Input (${isInput.reportingCount})</div></div>
+      <div class="stat"><div class="num">${meV.coveragePct}%</div><div class="lbl">ME Coverage (for this AM's doctors)</div></div>
+      <div class="stat"><div class="num" style="color:var(--warn);">${meV.nvdCount}</div><div class="lbl">ME — No Visit (NVD)</div></div>
+    </div>
+    <div class="panel panel-pad" style="margin-bottom:16px;">
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Product Group Contribution — ${escHtml(reviewState.am)}</h3>
+      <div style="height:240px;"><canvas id="chartAmReviewGroups"></canvas></div>
+    </div>
+    <div class="panel panel-pad">
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Doctors under ${escHtml(reviewState.am)}</h3>
+      ${reviewDoctorTableHtml('am', amRows)}
+    </div>
+  `;
+  document.getElementById('reviewAmSelect').addEventListener('change', e=>{ reviewState.am = e.target.value; renderAmReviewBody(); });
+  document.getElementById('reviewAmMonth').addEventListener('change', e=>{ reviewState.month = e.target.value; state.currentMonth = e.target.value; renderAmReviewBody(); });
+  document.getElementById('printReviewBtn').addEventListener('click', ()=> window.print());
+  destroyCharts();
+  try{
+    if(typeof Chart !== 'undefined'){
+      __chartInstances.push(new Chart(document.getElementById('chartAmReviewGroups'), {
+        type:'bar', data:{ labels: groupSums.map(g=>g.name), datasets:[{ label:'Total Support', data: groupSums.map(g=>Number(g.sum.toFixed(2))), backgroundColor:'#9966CC' }] },
+        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+      }));
+    }
+  }catch(e){ console.error('Chart render failed', e); }
+}
+
+async function renderRmReviewBody(){
+  reviewState.month = reviewState.month || state.currentMonth;
+  const body = document.getElementById('dashBody');
+  body.innerHTML = `<div class="empty" style="padding-top:60px;"><div class="big">🧭</div>Loading RM review…</div>`;
+
+  const rmList = currentRmList();
+  if(!reviewState.rm || !rmList.includes(reviewState.rm)) reviewState.rm = rmList[0];
+
+  const rows = await buildCompiledRows(state.master, reviewState.month);
+  const rmRows = rows.filter(r=>r.doctor.rm===reviewState.rm);
+  const s = compiledSummary(rmRows);
+  const rmWithData = rmRows.filter(r=>r.hasData);
+  const rmV = visitStatsShared(rmRows, 'rmVisit');
+  const amV = visitStatsShared(rmRows, 'amVisit');
+  const isInput = inputStatsShared(rmWithData);
+  const sumSupport = rmWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
+
+  const amsUnderThisRm = amsUnderRm(reviewState.rm);
+  const amBreakdown = amsUnderThisRm.map(am=>{
+    const amRows = rmRows.filter(r=>r.doctor.am===am);
+    const amS = compiledSummary(amRows);
+    const amWD = amRows.filter(r=>r.hasData);
+    const amVstat = visitStatsShared(amRows, 'amVisit');
+    return { am, ...amS, visitCoveragePct: amVstat.coveragePct, sumSupport: amWD.reduce((sum,r)=>sum+r.totalSupport,0) };
+  }).sort((a,b)=> b.sumSupport - a.sumSupport);
+
+  body.innerHTML = `
+    <div class="row-between">
+      <h2 class="section-title">🧭 RM Review</h2>
+      <div class="row">
+        <label class="muted" style="font-size:12.5px;">RM</label>
+        <select id="reviewRmSelect">${rmList.map(r=>`<option value="${escAttr(r)}" ${r===reviewState.rm?'selected':''}>${r}</option>`).join('')}</select>
+        <label class="muted" style="font-size:12.5px;">Month</label>
+        ${monthSelectHtml('reviewRmMonth', reviewState.month)}
+        <button class="btn btn-outline" id="printReviewBtn">🖨 Print / Save PDF</button>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${s.total}</div><div class="lbl">Doctors under this RM</div></div>
+      <div class="stat"><div class="num">${s.done}</div><div class="lbl">Updated (${s.coverage}%)</div></div>
+      <div class="stat"><div class="num">${rmV.coveragePct}%</div><div class="lbl">Coverage (RM Visit)</div></div>
+      <div class="stat"><div class="num">${amV.coveragePct}%</div><div class="lbl">AM Visit Coverage (team avg)</div></div>
+      <div class="stat"><div class="num">${sumSupport.toFixed(2)}</div><div class="lbl">Total Support</div></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${(s.done? sumSupport/s.done:0).toFixed(2)}</div><div class="lbl">Avg Support</div></div>
+      <div class="stat"><div class="num">${isInput.totalInput.toFixed(2)}</div><div class="lbl">Total Input</div></div>
+      <div class="stat"><div class="num">${isInput.avgInput.toFixed(2)}</div><div class="lbl">Avg Input (${isInput.reportingCount})</div></div>
+      <div class="stat"><div class="num" style="color:var(--warn);">${rmV.nvdCount}</div><div class="lbl">RM — No Visit (NVD)</div></div>
+      <div class="stat"><div class="num">${amsUnderThisRm.length}</div><div class="lbl">AMs in this region</div></div>
+    </div>
+    <div class="panel panel-pad" style="margin-bottom:16px;">
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">AM-wise breakdown under ${escHtml(reviewState.rm)}</h3>
+      <div style="height:${Math.max(200, amBreakdown.length*40)}px;"><canvas id="chartRmReviewAms"></canvas></div>
+    </div>
+    <div class="panel panel-pad">
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">All doctors under ${escHtml(reviewState.rm)}</h3>
+      ${reviewDoctorTableHtml('rm', rmRows)}
+    </div>
+  `;
+  document.getElementById('reviewRmSelect').addEventListener('change', e=>{ reviewState.rm = e.target.value; renderRmReviewBody(); });
+  document.getElementById('reviewRmMonth').addEventListener('change', e=>{ reviewState.month = e.target.value; state.currentMonth = e.target.value; renderRmReviewBody(); });
+  document.getElementById('printReviewBtn').addEventListener('click', ()=> window.print());
+  destroyCharts();
+  try{
+    if(typeof Chart !== 'undefined'){
+      __chartInstances.push(new Chart(document.getElementById('chartRmReviewAms'), {
+        type:'bar', data:{ labels: amBreakdown.map(a=>a.am), datasets:[{ label:'Total Support', data: amBreakdown.map(a=>Number(a.sumSupport.toFixed(2))), backgroundColor:'#5C3B87' }] },
+        options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+      }));
+    }
+  }catch(e){ console.error('Chart render failed', e); }
+}
+
+async function renderMeReviewBody(){
+  reviewState.month = reviewState.month || state.currentMonth;
+  const body = document.getElementById('dashBody');
+  body.innerHTML = `<div class="empty" style="padding-top:60px;"><div class="big">🩺</div>Loading ME review…</div>`;
+
+  const meList = Array.from(new Set(state.master.map(d=>d.me).filter(Boolean))).sort();
+  if(!reviewState.me || !meList.includes(reviewState.me)) reviewState.me = meList[0];
+
+  const rows = await buildCompiledRows(state.master, reviewState.month);
+  const meRows = rows.filter(r=>r.doctor.me===reviewState.me);
+  const s = compiledSummary(meRows);
+  const meWithData = meRows.filter(r=>r.hasData);
+  const meV = visitStatsShared(meRows, 'meVisit');
+  const isInput = inputStatsShared(meWithData);
+  const sumSupport = meWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
+
+  body.innerHTML = `
+    <div class="row-between">
+      <h2 class="section-title">🩺 ME Review</h2>
+      <div class="row">
+        <label class="muted" style="font-size:12.5px;">ME</label>
+        <select id="reviewMeSelect">${meList.map(m=>`<option value="${escAttr(m)}" ${m===reviewState.me?'selected':''}>${m}</option>`).join('')}</select>
+        <label class="muted" style="font-size:12.5px;">Month</label>
+        ${monthSelectHtml('reviewMeMonth', reviewState.month)}
+        <button class="btn btn-outline" id="printReviewBtn">🖨 Print / Save PDF</button>
+      </div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${s.total}</div><div class="lbl">Doctors covered</div></div>
+      <div class="stat"><div class="num">${s.done}</div><div class="lbl">Updated (${s.coverage}%)</div></div>
+      <div class="stat"><div class="num">${meV.coveragePct}%</div><div class="lbl">Coverage (ME Visit)</div></div>
+      <div class="stat"><div class="num" style="color:var(--warn);">${meV.nvdCount}</div><div class="lbl">ME — No Visit (NVD)</div></div>
+      <div class="stat"><div class="num">${sumSupport.toFixed(2)}</div><div class="lbl">Total Support</div></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${(s.done? sumSupport/s.done:0).toFixed(2)}</div><div class="lbl">Avg Support</div></div>
+      <div class="stat"><div class="num">${isInput.totalInput.toFixed(2)}</div><div class="lbl">Total Input</div></div>
+      <div class="stat"><div class="num">${isInput.avgInput.toFixed(2)}</div><div class="lbl">Avg Input (${isInput.reportingCount})</div></div>
+    </div>
+    <div class="panel panel-pad">
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Doctors under ${escHtml(reviewState.me)}</h3>
+      ${reviewDoctorTableHtml('me', meRows)}
+    </div>
+  `;
+  document.getElementById('reviewMeSelect').addEventListener('change', e=>{ reviewState.me = e.target.value; renderMeReviewBody(); });
+  document.getElementById('reviewMeMonth').addEventListener('change', e=>{ reviewState.month = e.target.value; state.currentMonth = e.target.value; renderMeReviewBody(); });
+  document.getElementById('printReviewBtn').addEventListener('click', ()=> window.print());
+  destroyCharts();
+}
+
 /* ============ ADMIN: MASTER DATA TAB ============ */
 function renderMasterAdminBody(){
   const body = document.getElementById('dashBody');
   const meta = state.masterMeta || {};
+  const dpMeta = state.dpWeightsMeta || {};
   body.innerHTML = `
     <h2 class="section-title">Doctor Master Data</h2>
     <p class="muted" style="margin-top:6px;">This is the master list of doctors (identity &amp; assignment details) used across the app. Only you can update it.</p>
@@ -1665,6 +2001,19 @@ function renderMasterAdminBody(){
       <div class="stat"><div class="num">${state.master.length}</div><div class="lbl">Doctors in master list</div></div>
       <div class="stat"><div class="num" style="font-size:15px;">${meta.updatedAt ? new Date(meta.updatedAt).toLocaleString() : 'Original file'}</div><div class="lbl">Last updated</div></div>
       <div class="stat"><div class="num" style="font-size:15px;">${escHtml(meta.updatedBy||'—')}</div><div class="lbl">Updated by</div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-pad">
+        <div class="row-between">
+          <strong>Product DP (price) rates</strong>
+          <span class="muted" style="font-size:12px;">Used to calculate Total Support. Changing a rate here recalculates all Total Support figures — past and future — using the new rate.</span>
+        </div>
+        <p class="muted" style="margin-top:4px;">Last updated: ${dpMeta.updatedAt ? new Date(dpMeta.updatedAt).toLocaleString() : 'original defaults'} by ${escHtml(dpMeta.updatedBy||'—')}</p>
+        <div id="dpRatesWrap"></div>
+        <div class="login-err" id="dpRatesErr" style="display:none;"></div>
+        <button class="btn btn-primary" id="saveDpRatesBtn" style="margin-top:12px;">Save DP Rates</button>
+      </div>
     </div>
 
     <div class="panel" style="margin-bottom:16px;">
@@ -1716,6 +2065,8 @@ function renderMasterAdminBody(){
       </div>
     </div>
   `;
+  renderDpRatesGrid();
+  document.getElementById('saveDpRatesBtn').addEventListener('click', saveDpRatesFromGrid);
   renderMasterEditRows();
   document.getElementById('masterSearch').addEventListener('input', e=>{
     masterAdminState.search = e.target.value;
@@ -1734,6 +2085,46 @@ function renderMasterAdminBody(){
 }
 
 let masterAdminState = { search: '' };
+
+function renderDpRatesGrid(){
+  const wrap = document.getElementById('dpRatesWrap');
+  if(!wrap) return;
+  wrap.innerHTML = PRODUCT_GROUPS.map(g=>`
+    <div class="fgroup">
+      <h4>${g.name}</h4>
+      <div class="fgrid">
+        ${g.items.map(it=>`<div class="fitem"><label>${it.label}</label><input type="number" step="0.01" min="0" class="dpRateInput" data-id="${it.id}" value="${getDpWeight(it.id)}"/></div>`).join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function saveDpRatesFromGrid(){
+  const errBox = document.getElementById('dpRatesErr');
+  const inputs = document.querySelectorAll('.dpRateInput');
+  const newWeights = Object.assign({}, state.dpWeights);
+  let hasError = false;
+  inputs.forEach(inp=>{
+    const v = parseFloat(inp.value);
+    if(isNaN(v) || v < 0){ hasError = true; return; }
+    newWeights[inp.dataset.id] = v;
+  });
+  if(hasError){
+    errBox.textContent = 'Please enter a valid non-negative number for every DP rate.';
+    errBox.style.display = 'block';
+    return;
+  }
+  errBox.style.display = 'none';
+  const btn = document.getElementById('saveDpRatesBtn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const ok = await saveDpWeights(newWeights, state.userName);
+  btn.disabled = false; btn.textContent = 'Save DP Rates';
+  if(ok){
+    showToast('DP rates updated ✔ Total Support figures now use the new rates.');
+    renderMasterAdminBody();
+  }
+  // if it failed, storageSet already showed an explanatory toast
+}
 
 function renderMasterEditRows(){
   const tbody = document.getElementById('masterEditRows');
