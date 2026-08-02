@@ -236,7 +236,7 @@ const LOGO_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFoCAI
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-08-01 19:50 UTC';
+const APP_VERSION = 'Build 2026-08-02 00:41 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -484,6 +484,23 @@ async function mirrorRowToSheet(doc, entry, month){
   }
 }
 
+async function mirrorRowsBatchToSheet(sheetName, rowsArray){
+  try{
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'upsertRows', sheetName, rows: rowsArray, token: APPS_SCRIPT_SECRET }),
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if(data.error) throw new Error(data.error);
+    return true;
+  }catch(e){
+    console.error('mirrorRowsBatchToSheet failed', e);
+    return false;
+  }
+}
+
 async function loadMaster(){
   const raw = await storageGet('my100_master', true);
   if(raw){
@@ -604,6 +621,19 @@ function retryConnection(){
     else if(state.role==='admin') await renderAdminDashboard();
     else renderLogin();
   });
+}
+
+async function refreshLiveData(){
+  showToast('Refreshing live data…');
+  state.entriesCache = {}; // force fresh fetch instead of using anything cached this session
+  await loadMaster();
+  if(state.role==='am'){
+    await renderAmDashboard();
+  } else {
+    // stays on whichever tab/filters/month the admin or RM currently has open
+    await renderCompiledDashboard(state.role);
+  }
+  showToast('Live data refreshed ✔');
 }
 
 function topbarHtml(roleLabel){
@@ -1059,9 +1089,10 @@ async function saveCurrentEntry(){
 async function buildCompiledRows(doctorsList, month){
   const amsInScope = Array.from(new Set(doctorsList.map(d=>d.am)));
   const entriesByAm = {};
-  for(const am of amsInScope){
-    entriesByAm[am] = await loadEntriesForAmMonth(am, month);
-  }
+  // Fetch every AM's entries in parallel instead of one-at-a-time — with 13 AMs this
+  // turns ~13 sequential round-trips (several seconds) into a single parallel batch.
+  const results = await Promise.all(amsInScope.map(am => loadEntriesForAmMonth(am, month)));
+  amsInScope.forEach((am, i) => { entriesByAm[am] = results[i]; });
   return doctorsList.map(d=>{
     const entry = (entriesByAm[d.am] || {})[d.code] || null;
     const groupTotals = {};
@@ -1164,6 +1195,7 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
       <div class="row">
         <label class="muted" style="font-size:12.5px;">Month</label>
         ${monthSelectHtml('monthSelect', compState.month)}
+        <button class="btn btn-outline" id="refreshLiveBtn" title="Bypass cache and pull the latest saved data">🔄 Refresh Live Data</button>
         <button class="btn btn-outline" id="syncSheetBtn">📄 Sync to Google Sheet</button>
         <button class="btn btn-primary" id="exportBtn">⬇ Download Excel</button>
       </div>
@@ -1227,6 +1259,7 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
   }
   document.getElementById('exportBtn').addEventListener('click', ()=> exportRowsToExcel(rows));
   document.getElementById('syncSheetBtn').addEventListener('click', ()=> syncRowsToSheet(rows, compState.month));
+  document.getElementById('refreshLiveBtn').addEventListener('click', refreshLiveData);
 }
 
 function exportRowsToExcel(rows, monthOverride){
@@ -1269,17 +1302,20 @@ async function syncRowsToSheet(rows, month){
   const btn = document.getElementById('syncSheetBtn');
   const originalText = btn.textContent;
   btn.disabled = true;
+  const sheetName = monthToSheetTabName(month);
+  const BATCH_SIZE = 50;
   let ok = 0, failed = 0;
-  for(let i=0; i<rowsWithData.length; i++){
-    btn.textContent = `Syncing… ${i+1}/${rowsWithData.length}`;
-    const r = rowsWithData[i];
-    const success = await mirrorRowToSheet(r.doctor, r.entry, month);
-    if(success) ok++; else failed++;
+  for(let i=0; i<rowsWithData.length; i+=BATCH_SIZE){
+    const batch = rowsWithData.slice(i, i+BATCH_SIZE);
+    btn.textContent = `Syncing… ${Math.min(i+BATCH_SIZE, rowsWithData.length)}/${rowsWithData.length}`;
+    const rowValuesBatch = batch.map(r => buildSheetRowArray(r.doctor, r.entry, true, month));
+    const success = await mirrorRowsBatchToSheet(sheetName, rowValuesBatch);
+    if(success) ok += batch.length; else failed += batch.length;
   }
   btn.disabled = false;
   btn.textContent = originalText;
   if(failed===0){
-    showToast(`Synced ${ok} doctors to the "${monthToSheetTabName(month)}" tab ✔`);
+    showToast(`Synced ${ok} doctors to the "${sheetName}" tab ✔`);
   }else{
     showToast(`Synced ${ok} doctors — ${failed} failed. Check your connection and try again.`);
   }
@@ -1411,6 +1447,7 @@ async function renderKpiDashboardBody(){
       <div class="row">
         <label class="muted" style="font-size:12.5px;">Month</label>
         ${monthSelectHtml('dashMonthSelect', dashState.month)}
+        <button class="btn btn-outline" id="refreshLiveBtn" title="Bypass cache and pull the latest saved data">🔄 Refresh Live Data</button>
       </div>
     </div>
 
@@ -1566,6 +1603,7 @@ async function renderKpiDashboardBody(){
     dashState.month = e.target.value; state.currentMonth = e.target.value;
     renderKpiDashboardBody();
   });
+  document.getElementById('refreshLiveBtn').addEventListener('click', refreshLiveData);
 
   destroyCharts();
   try{
