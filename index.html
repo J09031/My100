@@ -1,6 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+// Force a genuinely fresh fetch of this page once per browser session, so nobody
+// ever gets stuck looking at an old cached version after an update is pushed.
+// Runs before anything else on the page. Uses sessionStorage as a guard so it only
+// does this once per tab/session, not on every manual refresh.
+(function(){
+  try{
+    if(!sessionStorage.getItem('my100_cache_busted')){
+      sessionStorage.setItem('my100_cache_busted','1');
+      var url = new URL(window.location.href);
+      url.searchParams.set('_v', Date.now().toString());
+      window.location.replace(url.toString());
+    }
+  }catch(e){}
+})();
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -256,7 +272,7 @@ const CREST_DATA_URI = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAARgAAAEaCA
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-08-03 06:53 UTC';
+const APP_VERSION = 'Build 2026-08-04 03:13 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -310,6 +326,21 @@ const PRODUCT_GROUPS = [
   ]},
 ];
 const ALL_PRODUCT_ITEMS = PRODUCT_GROUPS.flatMap(g => g.items);
+
+// Business category classification per product item (for the "Category Type Mix" chart)
+const PRODUCT_CATEGORY = {
+  ran100:'Lead Brand', ran30:'Lead Brand',
+  lax100:'Build Brand', lax200:'Build Brand', lax500:'Build Brand',
+  visco:'Build Brand', viscoab:'Build Brand',
+  bude05:'Build Brand', bude1:'Build Brand', duta:'Build Brand', fora05:'Build Brand',
+  fora1:'Build Brand', glyco:'Build Brand', leo:'Build Brand', toba:'Build Brand',
+  spogg:'Build Brand',
+  zdmulti:'NI Brand', spoggd:'NI Brand',
+  zdds:'Maintain', zdsyr:'Maintain',
+  akairtab:'Maintain', akairsyp:'Maintain',
+  pecef200:'Maintain', pecefduo:'Maintain', pecefsyr:'Maintain',
+};
+const CATEGORY_ORDER = ['Lead Brand','Build Brand','NI Brand','Maintain'];
 function defaultDpWeights(){
   const w = {};
   ALL_PRODUCT_ITEMS.forEach(it => { w[it.id] = it.defaultWeight; });
@@ -401,7 +432,7 @@ function fyMonthGroups(){
   // FY start year is the calendar year in which April falls for the current FY
   const curFyStart = (now.getMonth()+1) >= 4 ? curCalYear : curCalYear - 1;
   const groups = [];
-  [curFyStart-1, curFyStart, curFyStart+1].forEach(startYear=>{
+  [curFyStart, curFyStart+1].forEach(startYear=>{
     const label = 'FY ' + startYear + '-' + String(startYear+1).slice(-2);
     const months = [];
     for(let m=4;m<=12;m++) months.push(mstr(startYear,m));
@@ -416,6 +447,22 @@ function monthSelectHtml(id, selected){
     `<optgroup label="${g.label}">${g.months.map(m=>
       `<option value="${m}" ${m===selected?'selected':''}>${monthLabel(m)}</option>`
     ).join('')}</optgroup>`
+  ).join('')}</select>`;
+}
+// AMs may only enter data for the previous month or the current month — never future months,
+// and not older months either (those should already be closed out).
+function amEntryMonths(){
+  const now = new Date();
+  const cur = mstr(now.getFullYear(), now.getMonth()+1);
+  const prevDate = new Date(now.getFullYear(), now.getMonth()-1, 1);
+  const prev = mstr(prevDate.getFullYear(), prevDate.getMonth()+1);
+  return [prev, cur];
+}
+function amMonthSelectHtml(id, selected){
+  const months = amEntryMonths();
+  const safeSelected = months.includes(selected) ? selected : months[months.length-1];
+  return `<select id="${id}">${months.map(m=>
+    `<option value="${m}" ${m===safeSelected?'selected':''}>${monthLabel(m)}</option>`
   ).join('')}</select>`;
 }
 
@@ -780,7 +827,7 @@ function renderLogin(){
     <div class="login-wrap">
       <div class="login-card">
         <div style="display:flex; justify-content:center; margin-bottom:18px;">
-          <span class="crest-hero" style="width:175px; height:175px; border-radius:32px;"><img src="${LOGO_DATA_URI}" alt="Binoy Singha crest"/></span>
+          <span class="crest-hero" style="width:266px; height:266px; border-radius:32px;"><img src="${LOGO_DATA_URI}" alt="Binoy Singha crest"/></span>
         </div>
         <h1 class="login-title display" style="text-align:center;">Welcome back</h1>
         <p class="login-sub" style="text-align:center;">Sign in to enter your doctor data, or view the compiled RCPA report.</p>
@@ -862,7 +909,9 @@ function filterSelectHtml(id, label, options, selected){
 let amState = { search:'', month: state.currentMonth, meFilter:'ALL', specialtyFilter:'ALL', locationFilter:'ALL' };
 
 async function renderAmDashboard(){
-  amState.month = state.currentMonth;
+  const validMonths = amEntryMonths();
+  amState.month = validMonths.includes(state.currentMonth) ? state.currentMonth : validMonths[validMonths.length-1];
+  state.currentMonth = amState.month;
   const myDoctors = state.master.filter(d=>d.am===state.userName);
   const entries = await loadEntriesForAmMonth(state.userName, amState.month);
   renderAmShell(myDoctors, entries);
@@ -886,7 +935,7 @@ function renderAmShell(myDoctors, entries){
       </div>
       <div class="toolbar" style="margin-top:0;">
         <label class="muted" style="font-size:12.5px; font-weight:700;">📅 Reporting month:</label>
-        ${monthSelectHtml('monthSelect', amState.month)}
+        ${amMonthSelectHtml('monthSelect', amState.month)}
         <span class="muted">Entries you save are recorded against this month.</span>
       </div>
       <div class="stat-grid">
@@ -1502,11 +1551,18 @@ async function renderKpiDashboardBody(){
     total: rows.reduce((s,r)=> s + (r.entry && r.entry[it.id]!=null && r.entry[it.id]!=='' ? (parseFloat(r.entry[it.id])||0) : 0), 0),
   }));
 
-  // Practice type distribution
-  const practiceCounts = {};
+  // Category Type Mix — contribution to Total Support by business category (Lead/Build/NI/Maintain)
+  const categorySums = {};
+  CATEGORY_ORDER.forEach(c=> categorySums[c] = 0);
   rows.forEach(r=>{
-    const p = (r.entry && r.entry.practice) || normalizePractice(r.doctor.practice) || 'Unspecified';
-    practiceCounts[p] = (practiceCounts[p]||0) + 1;
+    if(!r.hasData) return;
+    ALL_PRODUCT_ITEMS.forEach(it=>{
+      const v = parseFloat(r.entry[it.id]);
+      if(!isNaN(v)){
+        const cat = PRODUCT_CATEGORY[it.id];
+        categorySums[cat] += (v * getDpWeight(it.id)) / 100000;
+      }
+    });
   });
 
   // Visit compliance (company-wide)
@@ -1616,7 +1672,8 @@ async function renderKpiDashboardBody(){
         <div style="height:260px;"><canvas id="chartGroupSupport"></canvas></div>
       </div>
       <div class="panel panel-pad" style="flex:1; min-width:280px;">
-        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Practice Type Mix</h3>
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Category Type Mix</h3>
+        <p class="muted" style="margin-top:-8px; font-size:11.5px;">Lead = Rantac Syrup. Build = Laxolite, Viscojoy, Nebulisation, Sporlac GG. NI = Z&amp;D Multi, Sporlac GG Drop. Maintain = everything else.</p>
         <div style="height:260px;"><canvas id="chartPracticeMix"></canvas></div>
       </div>
     </div>
@@ -1765,7 +1822,7 @@ async function renderKpiDashboardBody(){
 
       __chartInstances.push(new Chart(document.getElementById('chartPracticeMix'), {
         type: 'doughnut',
-        data: { labels: Object.keys(practiceCounts), datasets: [{ data: Object.values(practiceCounts), backgroundColor: palette }] },
+        data: { labels: CATEGORY_ORDER, datasets: [{ data: CATEGORY_ORDER.map(c=>Number(categorySums[c].toFixed(2))), backgroundColor: palette }] },
         options: { responsive:true, maintainAspectRatio:false }
       }));
 
@@ -1810,6 +1867,148 @@ function reviewDoctorTableHtml(idPrefix, rowsSubset){
   `;
 }
 
+/* Shared KPI block computation, reused by AM Review and RM Review (main Dashboard has its own inline version) */
+function computeExtraKpis(rows){
+  const withD = rows.filter(r=>r.hasData);
+  const activeRows = withD.filter(r=>r.totalSupport>0).sort((a,b)=> b.totalSupport - a.totalSupport);
+
+  const segBuckets = [
+    { label:'MORE THAN 1 LAC',     test:(ts,hd)=> hd && ts>=1 },
+    { label:'BETWEEN 75K-100K',    test:(ts,hd)=> hd && ts>=0.75 && ts<1 },
+    { label:'BETWEEN 50K-75K',     test:(ts,hd)=> hd && ts>=0.50 && ts<0.75 },
+    { label:'BETWEEN 25K-50K',     test:(ts,hd)=> hd && ts>=0.25 && ts<0.50 },
+    { label:'BETWEEN 10-25K',      test:(ts,hd)=> hd && ts>=0.10 && ts<0.25 },
+    { label:'LESS THAN 10K',       test:(ts,hd)=> hd && ts>0 && ts<0.10 },
+  ];
+  const segments = segBuckets.map(b=>({ label:b.label, count: rows.filter(r=>b.test(r.totalSupport, r.hasData)).length }));
+  const bucketedCount = segments.reduce((s,seg)=>s+seg.count,0);
+  segments.push({ label:'NON RXER', count: rows.length - bucketedCount });
+
+  const top10 = activeRows.slice(0, 10);
+
+  const SANKALP_SET = new Set(['Ad-board','MRS','NBS']);
+  const sankalpRows = withD.filter(r=> SANKALP_SET.has(r.entry.activity));
+  const nonSankalpRows = withD.filter(r=> r.entry.activity && !SANKALP_SET.has(r.entry.activity));
+  const noActivityRows = withD.filter(r=> !r.entry.activity);
+  const avgOf = (arr)=> arr.length ? arr.reduce((s,r)=>s+r.totalSupport,0)/arr.length : 0;
+  const sumOf = (arr)=> arr.reduce((s,r)=>s+r.totalSupport,0);
+  const activityCategories = [
+    { label:'Sankalp', rows: sankalpRows },
+    { label:'Non-Sankalp', rows: nonSankalpRows },
+    { label:'Not specified', rows: noActivityRows },
+  ].map(cat=>{
+    const mv = visitStatsShared(cat.rows, 'meVisit');
+    const av = visitStatsShared(cat.rows, 'amVisit');
+    const rv = visitStatsShared(cat.rows, 'rmVisit');
+    const is = inputStatsShared(cat.rows);
+    return { label: cat.label, count: cat.rows.length, meVisitPct: mv.coveragePct, amVisitPct: av.coveragePct, rmVisitPct: rv.coveragePct,
+      totalSupport: sumOf(cat.rows), avgSupport: avgOf(cat.rows), totalInput: is.totalInput, avgInput: is.avgInput };
+  });
+
+  const groupSums = PRODUCT_GROUPS.map(g=>({ name:g.name, sum: rows.reduce((s,r)=> s+(r.hasData? r.groupTotals[g.key]:0), 0) }));
+  const productUnitTotals = ALL_PRODUCT_ITEMS.map(it=>({
+    label: it.label,
+    total: rows.reduce((s,r)=> s + (r.entry && r.entry[it.id]!=null && r.entry[it.id]!=='' ? (parseFloat(r.entry[it.id])||0) : 0), 0),
+  }));
+
+  return { segments, top10, activityCategories, groupSums, productUnitTotals, total: rows.length };
+}
+
+/* Renders the 5 requested KPI blocks (Product Group Contribution, Business Segmentation,
+   Top 10, Activity Type, Product-wise Units) with unique canvas IDs per tab (idPrefix). */
+function extraKpiBlocksHtml(idPrefix, kpis){
+  const { segments, top10, activityCategories, groupSums, productUnitTotals, total } = kpis;
+  return `
+    <div class="panel panel-pad" style="margin-bottom:16px;">
+      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Product Group Contribution</h3>
+      <div style="height:240px;"><canvas id="chart${idPrefix}Groups"></canvas></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-pad">
+        <h3 style="margin:0; font-family:Georgia,serif; color:var(--ink);">Doctor Business Segmentation</h3>
+        <div class="row" style="align-items:flex-start; gap:16px; margin-top:12px;">
+          <div style="flex:1; min-width:260px;">
+            <table>
+              <thead><tr><th>Description</th><th class="num-header">No of Dr</th><th class="num-header">%</th></tr></thead>
+              <tbody>
+                ${segments.map(s=>`<tr><td>${escHtml(s.label)}</td><td class="num-cell">${s.count}</td><td class="num-cell">${total? (s.count/total*100).toFixed(2):'0.00'}%</td></tr>`).join('')}
+                <tr><td><strong>Total Dr</strong></td><td class="num-cell"><strong>${total}</strong></td><td class="num-cell"><strong>100.00%</strong></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="flex:1; min-width:260px; height:240px;"><canvas id="chart${idPrefix}Segmentation"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-pad">
+        <div class="row" style="align-items:flex-start; gap:16px;">
+          <div style="flex:1; min-width:260px;">
+            <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Top 10 Doctors by Total Support</h3>
+            <table>
+              <thead><tr><th class="num-header">#</th><th>Doctor</th><th class="num-header">Total Support</th><th>Activity</th><th class="num-header">Input</th></tr></thead>
+              <tbody>
+                ${top10.map((r,i)=>`<tr><td>${i+1}</td><td><strong>${escHtml(r.doctor.doctor)}</strong></td><td class="num-cell">${r.totalSupport.toFixed(2)}</td><td>${escHtml(r.entry.activity||'')}</td><td class="num-cell">${formatInputDisplay(r.entry.input)}</td></tr>`).join('')}
+                ${top10.length===0 ? '<tr><td colspan="5" class="muted">No data yet for this month.</td></tr>' : ''}
+              </tbody>
+            </table>
+          </div>
+          <div style="flex:1; min-width:260px; height:${Math.max(240, top10.length*32)}px;"><canvas id="chart${idPrefix}Top10"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-pad">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Activity Type: Sankalp vs Non-Sankalp</h3>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Category</th><th class="num-header">No. of Dr</th><th class="num-header">ME Visit</th><th class="num-header">AM Visit</th><th class="num-header">RM Visit</th><th class="num-header">Total Support</th><th class="num-header">Avg Support</th><th class="num-header">Total Input</th><th class="num-header">Avg Input</th></tr></thead>
+            <tbody>
+              ${activityCategories.map(c=>`<tr><td>${escHtml(c.label)}</td><td class="num-cell">${c.count}</td><td class="num-cell">${c.meVisitPct}%</td><td class="num-cell">${c.amVisitPct}%</td><td class="num-cell">${c.rmVisitPct}%</td><td class="num-cell">${c.totalSupport.toFixed(2)}</td><td class="num-cell">${c.avgSupport.toFixed(2)}</td><td class="num-cell">${formatInputAgg(c.totalInput)}</td><td class="num-cell">${formatInputAgg(c.avgInput)}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-pad">
+        <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Product-wise Total Units</h3>
+        <div class="table-scroll" style="max-height:300px;">
+          <table>
+            <thead><tr><th>Product</th><th class="num-header">Total Units</th></tr></thead>
+            <tbody>
+              ${productUnitTotals.map(p=>`<tr><td>${escHtml(p.label)}</td><td class="num-cell">${p.total}</td></tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function initExtraKpiCharts(idPrefix, kpis){
+  if(typeof Chart === 'undefined') return;
+  const { segments, top10, groupSums } = kpis;
+  try{
+    __chartInstances.push(new Chart(document.getElementById(`chart${idPrefix}Groups`), {
+      type:'bar', data:{ labels: groupSums.map(g=>g.name), datasets:[{ label:'Total Support', data: groupSums.map(g=>Number(g.sum.toFixed(2))), backgroundColor:'#9966CC' }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+    }));
+    __chartInstances.push(new Chart(document.getElementById(`chart${idPrefix}Segmentation`), {
+      type:'bar', data:{ labels: segments.map(s=>s.label), datasets:[{ label:'No. of Dr', data: segments.map(s=>s.count), backgroundColor:'#5C3B87' }] },
+      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+    }));
+    __chartInstances.push(new Chart(document.getElementById(`chart${idPrefix}Top10`), {
+      type:'bar', data:{ labels: top10.map(r=>r.doctor.doctor), datasets:[{ label:'Total Support', data: top10.map(r=>Number(r.totalSupport.toFixed(2))), backgroundColor:'#B98FDC' }] },
+      options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
+    }));
+  }catch(e){ console.error('Chart render failed', e); }
+}
+
 async function renderAmReviewBody(){
   reviewState.month = reviewState.month || state.currentMonth;
   const body = document.getElementById('dashBody');
@@ -1826,7 +2025,7 @@ async function renderAmReviewBody(){
   const amV = visitStatsShared(amRows, 'amVisit');
   const isInput = inputStatsShared(amWithData);
   const sumSupport = amWithData.reduce((sum,r)=> sum + r.totalSupport, 0);
-  const groupSums = PRODUCT_GROUPS.map(g=>({ name:g.name, sum: amRows.reduce((s2,r)=> s2+(r.hasData? r.groupTotals[g.key]:0), 0) }));
+  const kpis = computeExtraKpis(amRows);
 
   body.innerHTML = `
     <div class="row-between">
@@ -1853,10 +2052,7 @@ async function renderAmReviewBody(){
       <div class="stat"><div class="num">${meV.coveragePct}%</div><div class="lbl">ME Coverage (for this AM's doctors)</div></div>
       <div class="stat"><div class="num" style="color:var(--warn);">${meV.nvdCount}</div><div class="lbl">ME — No Visit (NVD)</div></div>
     </div>
-    <div class="panel panel-pad" style="margin-bottom:16px;">
-      <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Product Group Contribution — ${escHtml(reviewState.am)}</h3>
-      <div style="height:240px;"><canvas id="chartAmReviewGroups"></canvas></div>
-    </div>
+    ${extraKpiBlocksHtml('AmRev', kpis)}
     <div class="panel panel-pad">
       <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">Doctors under ${escHtml(reviewState.am)}</h3>
       ${reviewDoctorTableHtml('am', amRows)}
@@ -1866,14 +2062,7 @@ async function renderAmReviewBody(){
   document.getElementById('reviewAmMonth').addEventListener('change', e=>{ reviewState.month = e.target.value; state.currentMonth = e.target.value; renderAmReviewBody(); });
   document.getElementById('printReviewBtn').addEventListener('click', ()=> window.print());
   destroyCharts();
-  try{
-    if(typeof Chart !== 'undefined'){
-      __chartInstances.push(new Chart(document.getElementById('chartAmReviewGroups'), {
-        type:'bar', data:{ labels: groupSums.map(g=>g.name), datasets:[{ label:'Total Support', data: groupSums.map(g=>Number(g.sum.toFixed(2))), backgroundColor:'#9966CC' }] },
-        options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } } }
-      }));
-    }
-  }catch(e){ console.error('Chart render failed', e); }
+  initExtraKpiCharts('AmRev', kpis);
 }
 
 async function renderRmReviewBody(){
@@ -1901,6 +2090,7 @@ async function renderRmReviewBody(){
     const amVstat = visitStatsShared(amRows, 'amVisit');
     return { am, ...amS, visitCoveragePct: amVstat.coveragePct, sumSupport: amWD.reduce((sum,r)=>sum+r.totalSupport,0) };
   }).sort((a,b)=> b.sumSupport - a.sumSupport);
+  const kpis = computeExtraKpis(rmRows);
 
   body.innerHTML = `
     <div class="row-between">
@@ -1931,6 +2121,7 @@ async function renderRmReviewBody(){
       <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">AM-wise breakdown under ${escHtml(reviewState.rm)}</h3>
       <div style="height:${Math.max(200, amBreakdown.length*40)}px;"><canvas id="chartRmReviewAms"></canvas></div>
     </div>
+    ${extraKpiBlocksHtml('RmRev', kpis)}
     <div class="panel panel-pad">
       <h3 style="margin:0 0 12px; font-family:Georgia,serif; color:var(--ink);">All doctors under ${escHtml(reviewState.rm)}</h3>
       ${reviewDoctorTableHtml('rm', rmRows)}
@@ -1948,6 +2139,7 @@ async function renderRmReviewBody(){
       }));
     }
   }catch(e){ console.error('Chart render failed', e); }
+  initExtraKpiCharts('RmRev', kpis);
 }
 
 async function renderMeReviewBody(){
