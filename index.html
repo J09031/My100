@@ -256,7 +256,7 @@ const CREST_DATA_URI = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDA
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-08-05 10:19 UTC';
+const APP_VERSION = 'Build 2026-08-06 03:50 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -390,6 +390,14 @@ const state = {
   connectionOK: true, // false once a backend call fails
   lastSyncedAt: null,  // Date of the last successful backend call
 };
+
+function debounce(fn, delay){
+  let timer = null;
+  return function(...args){
+    clearTimeout(timer);
+    timer = setTimeout(()=> fn.apply(this, args), delay);
+  };
+}
 
 function monthNow(){
   const d = new Date();
@@ -973,9 +981,13 @@ function renderAmShell(myDoctors, entries){
   tbody.querySelectorAll('button[data-code]').forEach(b=>{
     b.addEventListener('click', ()=> openDrawer(b.dataset.code, myDoctors, entries));
   });
-  document.getElementById('amSearch').addEventListener('input', (e)=>{
-    amState.search = e.target.value; renderAmShell(myDoctors, entries);
-  });
+  document.getElementById('amSearch').addEventListener('input', debounce((e)=>{
+    const cursorPos = e.target.selectionStart;
+    amState.search = e.target.value;
+    renderAmShell(myDoctors, entries);
+    const newInput = document.getElementById('amSearch');
+    if(newInput){ newInput.focus(); newInput.setSelectionRange(cursorPos, cursorPos); }
+  }, 200));
   document.getElementById('meFilterSelect').addEventListener('change', (e)=>{
     amState.meFilter = e.target.value; renderAmShell(myDoctors, entries);
   });
@@ -1258,7 +1270,9 @@ async function saveCurrentEntry(){
       const myDoctors = state.master.filter(d=>d.am===state.userName);
       renderAmShell(myDoctors, entries);
     }
-    mirrorRowToSheet(doc, entries[doc.code], targetMonth); // fire-and-forget: readable Sheet mirror, non-blocking
+    // Note: the readable Sheet mirror is intentionally NOT auto-updated on every save anymore —
+    // that was firing an extra, increasingly-slow backend call on every single save (see
+    // "Sync to Google Sheet" button in the Compiled Report for updating it on demand instead).
   }
   // if save failed, storageSet already showed a toast explaining why — leave the drawer open so nothing is lost
 }
@@ -1463,7 +1477,13 @@ function renderReportBody(role, scopeDoctors, rows, summary, amOptions, preFilte
     </tr>`;
   }).join('');
 
-  document.getElementById('rmSearch').addEventListener('input', e=>{ compState.search=e.target.value; renderCompiledDashboard(role); });
+  document.getElementById('rmSearch').addEventListener('input', debounce(async e=>{
+    const cursorPos = e.target.selectionStart;
+    compState.search = e.target.value;
+    await renderCompiledDashboard(role);
+    const newInput = document.getElementById('rmSearch');
+    if(newInput){ newInput.focus(); newInput.setSelectionRange(cursorPos, cursorPos); }
+  }, 200));
   document.getElementById('amFilterSelect').addEventListener('change', e=>{ compState.amFilter=e.target.value; renderCompiledDashboard(role); });
   document.getElementById('meFilterSelect').addEventListener('change', e=>{ compState.meFilter=e.target.value; renderCompiledDashboard(role); });
   document.getElementById('specialtyFilterSelect').addEventListener('change', e=>{ compState.specialtyFilter=e.target.value; renderCompiledDashboard(role); });
@@ -2340,10 +2360,10 @@ function renderMasterAdminBody(){
   renderDpRatesGrid();
   document.getElementById('saveDpRatesBtn').addEventListener('click', saveDpRatesFromGrid);
   renderMasterEditRows();
-  document.getElementById('masterSearch').addEventListener('input', e=>{
+  document.getElementById('masterSearch').addEventListener('input', debounce(e=>{
     masterAdminState.search = e.target.value;
     renderMasterEditRows();
-  });
+  }, 200));
   document.getElementById('downloadMasterBtn').addEventListener('click', downloadMasterTemplate);
   document.getElementById('chooseFileBtn').addEventListener('click', ()=> document.getElementById('masterFileInput').click());
   document.getElementById('masterFileInput').addEventListener('change', handleMasterFile);
