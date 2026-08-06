@@ -256,7 +256,7 @@ const CREST_DATA_URI = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDA
 </script>
 <script>
 /* ============ CONFIG ============ */
-const APP_VERSION = 'Build 2026-08-06 03:50 UTC';
+const APP_VERSION = 'Build 2026-08-06 09:59 UTC';
 const PIN = { am: 'AM2026', rm: 'RM2026', admin: 'BINOY2026' };
 const ADMIN_NAME = 'Binoy Singha';
 
@@ -463,8 +463,8 @@ function amMonthSelectHtml(id, selected){
 /* ============ STORAGE (Google Apps Script Web App + Sheet backend) ============ */
 async function storageGet(key, shared){
   try{
-    const url = APPS_SCRIPT_URL + '?key=' + encodeURIComponent(key) + '&token=' + encodeURIComponent(APPS_SCRIPT_SECRET);
-    const res = await fetch(url);
+    const url = APPS_SCRIPT_URL + '?key=' + encodeURIComponent(key) + '&token=' + encodeURIComponent(APPS_SCRIPT_SECRET) + '&_t=' + Date.now();
+    const res = await fetch(url, { cache: 'no-store' });
     state.connectionOK = res.ok;
     if(!res.ok) return null;
     const data = await res.json();
@@ -482,6 +482,7 @@ async function storageSet(key, value, shared){
   try{
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
+      cache: 'no-store',
       // Content-Type must stay text/plain — a JSON content-type triggers a CORS
       // preflight that Apps Script Web Apps don't handle, and the request silently fails.
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -544,6 +545,7 @@ async function mirrorRowToSheet(doc, entry, month){
     const rowValues = buildSheetRowArray(doc, entry, true, month);
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
+      cache: 'no-store',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'upsertRow', sheetName, row: rowValues, token: APPS_SCRIPT_SECRET }),
     });
@@ -562,6 +564,7 @@ async function mirrorRowsBatchToSheet(sheetName, rowsArray){
   try{
     const res = await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
+      cache: 'no-store',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ action: 'upsertRows', sheetName, rows: rowsArray, token: APPS_SCRIPT_SECRET }),
     });
